@@ -208,6 +208,49 @@ func (s *Server) registerTools() {
 			mcp.Description("Maximum number of results to return (default 100)"),
 		),
 	), s.handleSearchObject)
+
+	// --- Development Tools ---
+
+	// SyntaxCheck
+	s.mcpServer.AddTool(mcp.NewTool("SyntaxCheck",
+		mcp.WithDescription("Check ABAP source code for syntax errors"),
+		mcp.WithString("object_url",
+			mcp.Required(),
+			mcp.Description("ADT URL of the object (e.g., /sap/bc/adt/programs/programs/ZTEST)"),
+		),
+		mcp.WithString("content",
+			mcp.Required(),
+			mcp.Description("ABAP source code to check"),
+		),
+	), s.handleSyntaxCheck)
+
+	// Activate
+	s.mcpServer.AddTool(mcp.NewTool("Activate",
+		mcp.WithDescription("Activate an ABAP object"),
+		mcp.WithString("object_url",
+			mcp.Required(),
+			mcp.Description("ADT URL of the object (e.g., /sap/bc/adt/programs/programs/ZTEST)"),
+		),
+		mcp.WithString("object_name",
+			mcp.Required(),
+			mcp.Description("Technical name of the object (e.g., ZTEST)"),
+		),
+	), s.handleActivate)
+
+	// RunUnitTests
+	s.mcpServer.AddTool(mcp.NewTool("RunUnitTests",
+		mcp.WithDescription("Run ABAP Unit tests for an object"),
+		mcp.WithString("object_url",
+			mcp.Required(),
+			mcp.Description("ADT URL of the object (e.g., /sap/bc/adt/oo/classes/ZCL_TEST)"),
+		),
+		mcp.WithBoolean("include_dangerous",
+			mcp.Description("Include dangerous risk level tests (default: false)"),
+		),
+		mcp.WithBoolean("include_long",
+			mcp.Description("Include long duration tests (default: false)"),
+		),
+	), s.handleRunUnitTests)
 }
 
 // newToolResultError creates an error result for tool execution failures.
@@ -444,5 +487,73 @@ func (s *Server) handleSearchObject(ctx context.Context, request mcp.CallToolReq
 	}
 
 	output, _ := json.MarshalIndent(results, "", "  ")
+	return mcp.NewToolResultText(string(output)), nil
+}
+
+// --- Development Tool Handlers ---
+
+func (s *Server) handleSyntaxCheck(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	objectURL, ok := request.Params.Arguments["object_url"].(string)
+	if !ok || objectURL == "" {
+		return newToolResultError("object_url is required"), nil
+	}
+
+	content, ok := request.Params.Arguments["content"].(string)
+	if !ok || content == "" {
+		return newToolResultError("content is required"), nil
+	}
+
+	results, err := s.adtClient.SyntaxCheck(ctx, objectURL, content)
+	if err != nil {
+		return newToolResultError(fmt.Sprintf("Syntax check failed: %v", err)), nil
+	}
+
+	output, _ := json.MarshalIndent(results, "", "  ")
+	return mcp.NewToolResultText(string(output)), nil
+}
+
+func (s *Server) handleActivate(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	objectURL, ok := request.Params.Arguments["object_url"].(string)
+	if !ok || objectURL == "" {
+		return newToolResultError("object_url is required"), nil
+	}
+
+	objectName, ok := request.Params.Arguments["object_name"].(string)
+	if !ok || objectName == "" {
+		return newToolResultError("object_name is required"), nil
+	}
+
+	result, err := s.adtClient.Activate(ctx, objectURL, objectName)
+	if err != nil {
+		return newToolResultError(fmt.Sprintf("Activation failed: %v", err)), nil
+	}
+
+	output, _ := json.MarshalIndent(result, "", "  ")
+	return mcp.NewToolResultText(string(output)), nil
+}
+
+func (s *Server) handleRunUnitTests(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	objectURL, ok := request.Params.Arguments["object_url"].(string)
+	if !ok || objectURL == "" {
+		return newToolResultError("object_url is required"), nil
+	}
+
+	// Build flags from optional parameters
+	flags := adt.DefaultUnitTestFlags()
+
+	if includeDangerous, ok := request.Params.Arguments["include_dangerous"].(bool); ok && includeDangerous {
+		flags.Dangerous = true
+	}
+
+	if includeLong, ok := request.Params.Arguments["include_long"].(bool); ok && includeLong {
+		flags.Long = true
+	}
+
+	result, err := s.adtClient.RunUnitTests(ctx, objectURL, &flags)
+	if err != nil {
+		return newToolResultError(fmt.Sprintf("Unit test run failed: %v", err)), nil
+	}
+
+	output, _ := json.MarshalIndent(result, "", "  ")
 	return mcp.NewToolResultText(string(output)), nil
 }
