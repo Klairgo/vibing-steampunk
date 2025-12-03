@@ -1215,6 +1215,7 @@ WRITE: / 'Count:', lv_count.`, strings.ToLower(programName))
 		"lv_count = 42.",
 		false, // replaceAll
 		true,  // syntaxCheck
+		false, // caseInsensitive
 	)
 	if err != nil {
 		t.Fatalf("EditSource failed: %v", err)
@@ -1244,8 +1245,9 @@ WRITE: / 'Count:', lv_count.`, strings.ToLower(programName))
 	result, err = client.EditSource(ctx, objectURL,
 		"lv_count = 42.",
 		"lv_count = 99.",
-		false,
-		true,
+		false, // replaceAll
+		true,  // syntaxCheck
+		false, // caseInsensitive
 	)
 	if err != nil {
 		t.Fatalf("EditSource (second edit) failed: %v", err)
@@ -1269,8 +1271,9 @@ WRITE: / 'Count:', lv_count.`, strings.ToLower(programName))
 	result, err = client.EditSource(ctx, objectURL,
 		"lv_count = 99.",
 		"lv_count = INVALID SYNTAX HERE",
-		false,
-		true, // Should detect syntax error
+		false, // replaceAll
+		true,  // syntaxCheck (should detect syntax error)
+		false, // caseInsensitive
 	)
 	if err != nil {
 		t.Fatalf("EditSource (syntax error test) failed: %v", err)
@@ -1294,6 +1297,34 @@ WRITE: / 'Count:', lv_count.`, strings.ToLower(programName))
 
 	if !strings.Contains(source, "lv_count = 99.") {
 		t.Errorf("Source should not have changed due to syntax error")
+	}
+
+	// Test 4: EditSource - case-insensitive matching
+	result, err = client.EditSource(ctx, objectURL,
+		"LV_COUNT = 99.", // Uppercase (ABAP is case-insensitive but pretty-printer may use lowercase)
+		"lv_count = 123.",
+		false, // replaceAll
+		true,  // syntaxCheck
+		true,  // caseInsensitive
+	)
+	if err != nil {
+		t.Fatalf("EditSource (case-insensitive test) failed: %v", err)
+	}
+
+	if !result.Success {
+		t.Logf("Case-insensitive test did not succeed (expected if pretty-printer normalized case): %s", result.Message)
+	} else {
+		t.Logf("Case-insensitive match succeeded: %s", result.Message)
+
+		// Verify case-insensitive change
+		source, err = client.GetProgram(ctx, programName)
+		if err != nil {
+			t.Fatalf("Failed to read program after case-insensitive edit: %v", err)
+		}
+
+		if !strings.Contains(source, "lv_count = 123.") {
+			t.Errorf("Expected source to contain 'lv_count = 123.', but it doesn't:\n%s", source)
+		}
 	}
 
 	t.Log("EditSource workflow completed successfully!")

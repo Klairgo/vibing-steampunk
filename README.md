@@ -5,7 +5,7 @@
 
 A Go-native MCP (Model Context Protocol) server for SAP ABAP Development Tools (ADT).
 
-Single-binary distribution of 40 ADT tools for use with Claude and other MCP-compatible AI assistants.
+Single-binary distribution of 42 ADT tools for use with Claude and other MCP-compatible AI assistants.
 
 ## Why This Project?
 
@@ -77,6 +77,9 @@ Comparison of ADT capabilities across implementations:
 | Deploy from File | - | - | **Y** |
 | Save to File | - | - | **Y** |
 | Rename Objects | - | - | **Y** |
+| **Grep/Search** |
+| Regex Search (single object) | - | - | **Y** |
+| Regex Search (package-wide) | - | - | **Y** |
 | **Transports** |
 | Transport Management | Y | Y | N |
 | **ATC** |
@@ -86,7 +89,19 @@ Comparison of ADT capabilities across implementations:
 
 **Legend:** Y = Full support, P = Partial, N = Not implemented, - = Not applicable
 
-## Available Tools (40)
+## Documentation for AI Agents
+
+**[MCP Usage Guide](MCP_USAGE.md)** - Machine-friendly reference for AI assistants using this MCP server. Includes:
+- Tool selection decision trees
+- Workflow patterns (search → edit, package-wide refactoring)
+- Performance optimization (token usage, when to use which tool)
+- Regex pattern library for ABAP
+- Error handling patterns
+- Integration examples (CI/CD, code review)
+
+This guide follows emerging best practices for MCP documentation aimed at AI agents rather than human developers.
+
+## Available Tools (42)
 
 ### Read Operations (14 tools)
 
@@ -183,6 +198,27 @@ DeployFromFile(file_path="/path/to/zcl_ml_iris.clas.abap", package_name="$ZAML_I
 | `GetPrettyPrinterSettings` | Get formatter settings |
 | `SetPrettyPrinterSettings` | Update formatter settings |
 | `GetTypeHierarchy` | Get type hierarchy (supertypes/subtypes) |
+
+### Grep/Search Tools (2 tools)
+
+| Tool | Description |
+|------|-------------|
+| `GrepObject` | Search for regex pattern in a single ABAP object. Returns matches with line numbers and optional context. |
+| `GrepPackage` | Search for regex pattern across all source objects in a package. Returns matches grouped by object. |
+
+**Features:**
+- Full regex support (Go regexp syntax)
+- Case-sensitive or case-insensitive matching
+- Context lines (like `grep -C`)
+- Object type filtering (programs, classes, interfaces, etc.)
+- Max results limit for package-wide searches
+
+**Use cases:**
+- Find TODO comments before sprint planning
+- Locate hardcoded values for refactoring
+- Search for patterns across multiple programs/classes
+- Discover all uses of a string literal
+- Prepare for surgical edits with EditSource
 
 ## Installation
 
@@ -374,7 +410,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
 
 | Metric | Value |
 |--------|-------|
-| **Tools** | 40 |
+| **Tools** | 42 |
 | **Unit Tests** | 91 (7 new file parser tests) |
 | **Integration Tests** | 21+ |
 | **Platforms** | 9 (Linux, macOS, Windows × amd64/arm64/386) |
