@@ -75,6 +75,14 @@ pkg/
 │   ├── cookies.go            # Cookie file parsing (Netscape format)
 │   └── xml.go                # XML types
 │
+├── dsl/                      # Fluent API & Workflow Engine (Report 012)
+│   ├── types.go              # Core types (ObjectRef, TestConfig, etc.)
+│   ├── search.go             # Fluent search builder
+│   ├── test_runner.go        # Unit test orchestration
+│   ├── workflow.go           # YAML workflow engine
+│   ├── batch.go              # Batch operations & pipeline builder
+│   └── dsl_test.go           # Unit tests (13 tests)
+│
 └── cache/                    # Caching infrastructure (Report 010)
     ├── cache.go              # Core interfaces and types
     ├── memory.go             # In-memory cache (default)
@@ -251,13 +259,40 @@ When creating a new report:
 | Metric | Value |
 |--------|-------|
 | **Tools** | 45 (19 focused, 45 expert) |
-| **Unit Tests** | 154 |
+| **Unit Tests** | 167 |
 | **Integration Tests** | 21+ |
 | **Platforms** | 9 |
-| **Phase** | 2 (Focused Mode) - Complete |
-| **Reports** | 11 numbered + 6 reference docs |
+| **Phase** | 3 (DSL & Workflows) - Complete |
+| **Reports** | 12 numbered + 6 reference docs |
 | **Cache Package** | ✅ Complete (in-memory + SQLite) |
 | **Safety System** | ✅ Complete (operation filtering, package restrictions) |
+| **DSL Package** | ✅ Complete (fluent API, YAML workflows, test orchestration) |
+
+### DSL & Workflow Usage
+
+```bash
+# Run unit tests for a package
+vsp workflow test "$TMP"
+vsp workflow test "$ZRAY*" --parallel 4 --json
+
+# Run YAML workflow
+vsp workflow run examples/workflows/ci-pipeline.yaml --var PACKAGE=\$TMP
+```
+
+```go
+// Go fluent API
+objects, _ := dsl.Search(client).
+    Query("ZCL_*").
+    Classes().
+    InPackage("$TMP").
+    Execute(ctx)
+
+summary, _ := dsl.Test(client).
+    Objects(objects...).
+    IncludeDangerous().
+    Parallel(4).
+    Run(ctx)
+```
 
 ### Roadmap
 - **Phase 5:** Graph Traversal & Analysis (Design: Reports 005-007)
