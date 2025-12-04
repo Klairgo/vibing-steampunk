@@ -200,6 +200,24 @@ func (s *Server) registerTools() {
 		),
 	), s.handleRunQuery)
 
+	// GetCDSDependencies
+	s.mcpServer.AddTool(mcp.NewTool("GetCDSDependencies",
+		mcp.WithDescription("Retrieve CDS view dependency tree showing all dependent objects (tables, views, associations)"),
+		mcp.WithString("ddls_name",
+			mcp.Required(),
+			mcp.Description("CDS DDL source name (e.g., 'I_SalesOrder', 'ZDDL_MY_VIEW')"),
+		),
+		mcp.WithString("dependency_level",
+			mcp.Description("Level of dependency resolution: 'unit' (direct only) or 'hierarchy' (recursive). Default: 'hierarchy'"),
+		),
+		mcp.WithBoolean("with_associations",
+			mcp.Description("Include modeled associations in dependency tree. Default: false"),
+		),
+		mcp.WithString("context_package",
+			mcp.Description("Filter dependencies to specific package context"),
+		),
+	), s.handleGetCDSDependencies)
+
 	// GetStructure
 	s.mcpServer.AddTool(mcp.NewTool("GetStructure",
 		mcp.WithDescription("Retrieve ABAP Structure"),
@@ -928,6 +946,52 @@ func (s *Server) handleRunQuery(ctx context.Context, request mcp.CallToolRequest
 
 	result, _ := json.MarshalIndent(contents, "", "  ")
 	return mcp.NewToolResultText(string(result)), nil
+}
+
+func (s *Server) handleGetCDSDependencies(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	ddlsName, ok := request.Params.Arguments["ddls_name"].(string)
+	if !ok || ddlsName == "" {
+		return newToolResultError("ddls_name is required"), nil
+	}
+
+	opts := adt.CDSDependencyOptions{
+		DependencyLevel:  "hierarchy",
+		WithAssociations: false,
+	}
+
+	if level, ok := request.Params.Arguments["dependency_level"].(string); ok && level != "" {
+		opts.DependencyLevel = level
+	}
+
+	if assoc, ok := request.Params.Arguments["with_associations"].(bool); ok {
+		opts.WithAssociations = assoc
+	}
+
+	if pkg, ok := request.Params.Arguments["context_package"].(string); ok && pkg != "" {
+		opts.ContextPackage = pkg
+	}
+
+	dependencyTree, err := s.adtClient.GetCDSDependencies(ctx, ddlsName, opts)
+	if err != nil {
+		return newToolResultError(fmt.Sprintf("Failed to get CDS dependencies: %v", err)), nil
+	}
+
+	// Add metadata summary
+	summary := map[string]interface{}{
+		"ddls_name":       ddlsName,
+		"dependency_tree": dependencyTree,
+		"statistics": map[string]interface{}{
+			"total_dependencies": len(dependencyTree.FlattenDependencies()) - 1, // -1 to exclude root
+			"dependency_depth":   dependencyTree.GetDependencyDepth(),
+			"by_type":            dependencyTree.CountDependenciesByType(),
+			"table_dependencies": len(dependencyTree.GetTableDependencies()),
+			"inactive_dependencies": len(dependencyTree.GetInactiveDependencies()),
+			"cycles":             dependencyTree.FindCycles(),
+		},
+	}
+
+	jsonResult, _ := json.MarshalIndent(summary, "", "  ")
+	return mcp.NewToolResultText(string(jsonResult)), nil
 }
 
 func (s *Server) handleGetStructure(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

@@ -214,6 +214,66 @@ func TestIntegration_GetPackage(t *testing.T) {
 	t.Logf("Sub-packages: %d, Objects: %d", len(pkg.SubPackages), len(pkg.Objects))
 }
 
+func TestIntegration_GetCDSDependencies(t *testing.T) {
+	client := getIntegrationClient(t)
+	ctx := context.Background()
+
+	// Test with simple SAP standard CDS view (wraps DDDDLSRC table)
+	result, err := client.GetCDSDependencies(ctx, "ACM_DDDDLSRC", CDSDependencyOptions{
+		DependencyLevel:  "hierarchy",
+		WithAssociations: false,
+	})
+
+	if err != nil {
+		t.Skipf("GetCDSDependencies failed (CDS view might not exist): %v", err)
+	}
+
+	if result.Name == "" {
+		t.Error("Expected result name, got empty")
+	}
+
+	t.Logf("CDS view: %s", result.Name)
+	t.Logf("Type: %s", result.Type)
+	t.Logf("Activation state: %s", result.ActivationState)
+	t.Logf("Children count: %d", len(result.Children))
+
+	// Test flattening
+	flat := result.FlattenDependencies()
+	t.Logf("Total dependencies (flat): %d", len(flat))
+
+	// Test type counting
+	byType := result.CountDependenciesByType()
+	for typ, count := range byType {
+		t.Logf("  %s: %d", typ, count)
+	}
+
+	// Test table dependencies
+	tables := result.GetTableDependencies()
+	t.Logf("Table dependencies: %d", len(tables))
+	for _, table := range tables {
+		t.Logf("  - %s", table.Name)
+	}
+
+	// Test inactive dependencies
+	inactive := result.GetInactiveDependencies()
+	if len(inactive) > 0 {
+		t.Logf("WARNING: Inactive dependencies found: %d", len(inactive))
+		for _, dep := range inactive {
+			t.Logf("  - %s (state: %s)", dep.Name, dep.ActivationState)
+		}
+	}
+
+	// Test cycle detection
+	cycles := result.FindCycles()
+	if len(cycles) > 0 {
+		t.Logf("WARNING: Cycles detected: %v", cycles)
+	}
+
+	// Test dependency depth
+	depth := result.GetDependencyDepth()
+	t.Logf("Dependency depth: %d", depth)
+}
+
 // --- Development Tools Integration Tests ---
 
 func TestIntegration_SyntaxCheck(t *testing.T) {
