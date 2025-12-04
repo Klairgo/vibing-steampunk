@@ -5,7 +5,7 @@
 
 A Go-native MCP (Model Context Protocol) server for SAP ABAP Development Tools (ADT).
 
-Single-binary distribution with 19 essential tools (focused mode) or 45 complete tools (expert mode) for use with Claude and other MCP-compatible AI assistants.
+Single-binary distribution with 20 essential tools (focused mode) or 47 complete tools (expert mode) for use with Claude and other MCP-compatible AI assistants.
 
 ## Why This Project?
 
@@ -29,8 +29,8 @@ This project stands on the shoulders of giants:
 
 **vsp** is a complete rewrite in Go, providing:
 - Single binary with zero runtime dependencies
-- Extended toolset (45 tools vs 13 in original)
-- Dual modes: 19 focused tools (AI-optimized) or 45 expert tools (complete)
+- Extended toolset (47 tools vs 13 in original)
+- Dual modes: 20 focused tools (AI-optimized) or 47 expert tools (complete)
 - Full CRUD operations and code intelligence
 - ~50x faster startup time
 
@@ -84,7 +84,7 @@ Comparison of ADT capabilities across implementations:
 | **Transports** |
 | Transport Management | Y | Y | N |
 | **ATC** |
-| Code Quality Checks | Y | Y | N |
+| Code Quality Checks | Y | Y | **Y** |
 | **Debugging** |
 | Remote Debugging | Y | Y | N |
 
@@ -152,7 +152,7 @@ See [docs/DSL.md](docs/DSL.md) for complete documentation and [examples/workflow
 
 **vsp** offers two operational modes to optimize AI assistant performance:
 
-### Focused Mode (Default) - 19 Tools
+### Focused Mode (Default) - 20 Tools
 
 **Recommended for most use cases.** Exposes a curated set of essential tools that reduce AI cognitive load and token overhead by 58%. Includes:
 - **Unified tools**: GetSource, WriteSource (replace 11 granular read/write tools)
@@ -160,12 +160,12 @@ See [docs/DSL.md](docs/DSL.md) for complete documentation and [examples/workflow
 - **Streamlined file ops**: ImportFromFile, ExportToFile (clearer naming)
 - **Core workflows**: EditSource, SearchObject, FindDefinition/References
 - **Data access**: GetTable, GetTableContents, RunQuery, GetCDSDependencies
-- **Development**: SyntaxCheck, RunUnitTests
+- **Development**: SyntaxCheck, RunUnitTests, RunATCCheck
 - **Advanced**: LockObject, UnlockObject
 
 **Enable:** `--mode=focused` (default, no flag needed)
 
-### Expert Mode - 45 Tools
+### Expert Mode - 47 Tools
 
 **For edge cases and debugging.** Exposes all tools including low-level atomic operations (CreateObject, UpdateSource, DeleteObject), specialized read operations (GetClassInclude with include types), and granular workflow tools. Maintains backward compatibility with existing workflows.
 
@@ -175,9 +175,9 @@ See [docs/DSL.md](docs/DSL.md) for complete documentation and [examples/workflow
 
 - **Tool definitions**: 69% reduction (~6,500 → ~2,000 tokens)
 - **Typical workflow**: 73% reduction (~3,000 → ~800 tokens)
-- **Decision clarity**: 19 choices instead of 45
+- **Decision clarity**: 20 choices instead of 47
 
-## Available Tools (45)
+## Available Tools (47)
 
 ### Unified Tools (2 tools) - Focused Mode
 
@@ -210,13 +210,46 @@ These tools replace 11 granular read/write operations with intelligent parameter
 | `GetCDSDependencies` | Retrieve CDS view dependency tree (forward dependencies: what this view depends on) |
 | `RunQuery` | Execute freestyle SQL query |
 
-### Development Tools (3 tools)
+### Development Tools (4 tools)
 
 | Tool | Description |
 |------|-------------|
 | `SyntaxCheck` | Check ABAP source code for syntax errors |
 | `Activate` | Activate an ABAP object |
 | `RunUnitTests` | Execute ABAP Unit tests |
+| `RunATCCheck` | Run ATC (ABAP Test Cockpit) code quality checks |
+
+### ATC (Code Quality) Tools (2 tools)
+
+| Tool | Description | Mode |
+|------|-------------|------|
+| `RunATCCheck` | Run ATC check on an object. Returns findings with priority (1=Error, 2=Warning, 3=Info), check/message titles, and line/column location. Uses system default check variant if not specified. | Focused |
+| `GetATCCustomizing` | Get ATC system configuration including default check variant and exemption reasons | Expert |
+
+**Example ATC output:**
+```json
+{
+  "summary": {
+    "totalObjects": 1,
+    "totalFindings": 3,
+    "errors": 1,
+    "warnings": 2,
+    "infos": 0
+  },
+  "worklist": {
+    "objects": [{
+      "name": "ZCL_TEST",
+      "findings": [{
+        "priority": 1,
+        "checkTitle": "Syntax Check",
+        "messageTitle": "Statement not accessible",
+        "line": 42,
+        "column": 5
+      }]
+    }]
+  }
+}
+```
 
 ### CRUD Operations (5 tools)
 
@@ -359,7 +392,7 @@ vsp --help  # Show all options
 | `--insecure` | | Skip TLS certificate verification |
 | `--cookie-file` | | Path to Netscape-format cookie file |
 | `--cookie-string` | | Cookie string (`key1=val1; key2=val2`) |
-| `--mode` | | Tool mode: `focused` (19 tools, default) or `expert` (45 tools) |
+| `--mode` | | Tool mode: `focused` (20 tools, default) or `expert` (47 tools) |
 | `--verbose` | `-v` | Enable verbose logging to stderr |
 | `--version` | | Show version information |
 
@@ -556,7 +589,7 @@ vibing-steampunk/
 │   ├── fileparser.go        # ABAP file parser (detect type/name from files)
 │   └── xml.go               # XML types and parsing
 ├── internal/mcp/            # MCP server implementation
-│   └── server.go            # Tool registration and handlers (45 tools, mode-aware)
+│   └── server.go            # Tool registration and handlers (47 tools, mode-aware)
 ├── reports/                 # Project documentation and research
 └── build/                   # Cross-platform binaries
 ```
@@ -567,8 +600,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
 
 | Metric | Value |
 |--------|-------|
-| **Tools** | 45 (19 focused, 45 expert) |
-| **Unit Tests** | 167 |
+| **Tools** | 47 (20 focused, 47 expert) |
+| **Unit Tests** | 172 |
 | **Integration Tests** | 21+ |
 | **Platforms** | 9 (Linux, macOS, Windows × amd64/arm64/386) |
 | **DSL Package** | ✅ Complete (fluent API, YAML workflows, test orchestration) |

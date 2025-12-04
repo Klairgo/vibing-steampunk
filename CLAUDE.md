@@ -4,7 +4,7 @@ This file provides context for AI assistants (Claude, etc.) working on this proj
 
 ## Project Overview
 
-**vsp** is a Go-native MCP (Model Context Protocol) server for SAP ABAP Development Tools (ADT). It provides a single-binary distribution with 19 essential tools (focused mode, default) or 45 complete tools (expert mode) for use with Claude and other MCP-compatible LLMs.
+**vsp** is a Go-native MCP (Model Context Protocol) server for SAP ABAP Development Tools (ADT). It provides a single-binary distribution with 20 essential tools (focused mode, default) or 47 complete tools (expert mode) for use with Claude and other MCP-compatible LLMs.
 
 ## Quick Reference
 
@@ -46,7 +46,7 @@ SAP_URL=http://host:50000 SAP_USER=user SAP_PASSWORD=pass ./vsp
 | `SAP_INSECURE` / `--insecure` | Skip TLS verification (default: false) |
 | `SAP_COOKIE_FILE` / `--cookie-file` | Path to Netscape-format cookie file |
 | `SAP_COOKIE_STRING` / `--cookie-string` | Cookie string (key1=val1; key2=val2) |
-| `SAP_MODE` / `--mode` | Tool mode: `focused` (19 tools, default) or `expert` (45 tools) |
+| `SAP_MODE` / `--mode` | Tool mode: `focused` (20 tools, default) or `expert` (47 tools) |
 | `SAP_VERBOSE` / `--verbose` | Enable verbose logging to stderr |
 | **Safety Configuration** | |
 | `SAP_READ_ONLY` / `--read-only` | Block all write operations (default: false) |
@@ -153,7 +153,7 @@ case "NewTool":
 
 ## Testing
 
-### Unit Tests (154 tests)
+### Unit Tests (172 tests)
 - Mock HTTP client (see `client_test.go`, `http_test.go`, `workflows_test.go`)
 - Cookie parsing tests (`cookies_test.go`)
 - Unified tools tests (GetSource, WriteSource, GrepObjects, GrepPackages)
@@ -258,8 +258,8 @@ When creating a new report:
 
 | Metric | Value |
 |--------|-------|
-| **Tools** | 45 (19 focused, 45 expert) |
-| **Unit Tests** | 167 |
+| **Tools** | 47 (20 focused, 47 expert) |
+| **Unit Tests** | 172 |
 | **Integration Tests** | 21+ |
 | **Platforms** | 9 |
 | **Phase** | 3 (DSL & Workflows) - Complete |

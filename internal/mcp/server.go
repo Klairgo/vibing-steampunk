@@ -137,9 +137,10 @@ func (s *Server) registerTools(mode string) {
 		"FindDefinition":  true,
 		"FindReferences":  true,
 
-		// Development tools (2)
+		// Development tools (3)
 		"SyntaxCheck":   true,
 		"RunUnitTests":  true,
+		"RunATCCheck":   true, // Code quality checks
 
 		// Advanced/Edge cases (2)
 		"LockObject":   true,
@@ -421,6 +422,32 @@ func (s *Server) registerTools(mode string) {
 			mcp.Description("Include long duration tests (default: false)"),
 		),
 	), s.handleRunUnitTests)
+	}
+
+	// --- ATC (Code Quality) ---
+
+	// RunATCCheck - Convenience tool (combines variant + run + worklist)
+	if shouldRegister("RunATCCheck") {
+		s.mcpServer.AddTool(mcp.NewTool("RunATCCheck",
+			mcp.WithDescription("Run ATC (ABAP Test Cockpit) code quality check on an object. Returns findings with priority, check title, message, and location. Priority: 1=Error, 2=Warning, 3=Info."),
+			mcp.WithString("object_url",
+				mcp.Required(),
+				mcp.Description("ADT URL of the object (e.g., /sap/bc/adt/oo/classes/ZCL_TEST)"),
+			),
+			mcp.WithString("variant",
+				mcp.Description("Check variant name (empty = use system default)"),
+			),
+			mcp.WithNumber("max_results",
+				mcp.Description("Maximum number of findings to return (default: 100)"),
+			),
+		), s.handleRunATCCheck)
+	}
+
+	// GetATCCustomizing - Expert mode: get ATC configuration
+	if shouldRegister("GetATCCustomizing") {
+		s.mcpServer.AddTool(mcp.NewTool("GetATCCustomizing",
+			mcp.WithDescription("Get ATC system configuration including default check variant and exemption reasons"),
+		), s.handleGetATCCustomizing)
 	}
 
 
@@ -1345,6 +1372,72 @@ func (s *Server) handleRunUnitTests(ctx context.Context, request mcp.CallToolReq
 	result, err := s.adtClient.RunUnitTests(ctx, objectURL, &flags)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("Unit test run failed: %v", err)), nil
+	}
+
+	output, _ := json.MarshalIndent(result, "", "  ")
+	return mcp.NewToolResultText(string(output)), nil
+}
+
+// --- ATC Handlers ---
+
+func (s *Server) handleRunATCCheck(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	objectURL, ok := request.Params.Arguments["object_url"].(string)
+	if !ok || objectURL == "" {
+		return newToolResultError("object_url is required"), nil
+	}
+
+	variant := ""
+	if v, ok := request.Params.Arguments["variant"].(string); ok {
+		variant = v
+	}
+
+	maxResults := 100
+	if mr, ok := request.Params.Arguments["max_results"].(float64); ok && mr > 0 {
+		maxResults = int(mr)
+	}
+
+	result, err := s.adtClient.RunATCCheck(ctx, objectURL, variant, maxResults)
+	if err != nil {
+		return newToolResultError(fmt.Sprintf("ATC check failed: %v", err)), nil
+	}
+
+	// Format output with summary
+	type summary struct {
+		TotalObjects  int `json:"totalObjects"`
+		TotalFindings int `json:"totalFindings"`
+		Errors        int `json:"errors"`
+		Warnings      int `json:"warnings"`
+		Infos         int `json:"infos"`
+	}
+	type output struct {
+		Summary  summary            `json:"summary"`
+		Worklist *adt.ATCWorklist   `json:"worklist"`
+	}
+
+	sum := summary{TotalObjects: len(result.Objects)}
+	for _, obj := range result.Objects {
+		sum.TotalFindings += len(obj.Findings)
+		for _, f := range obj.Findings {
+			switch f.Priority {
+			case 1:
+				sum.Errors++
+			case 2:
+				sum.Warnings++
+			default:
+				sum.Infos++
+			}
+		}
+	}
+
+	out := output{Summary: sum, Worklist: result}
+	outputJSON, _ := json.MarshalIndent(out, "", "  ")
+	return mcp.NewToolResultText(string(outputJSON)), nil
+}
+
+func (s *Server) handleGetATCCustomizing(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	result, err := s.adtClient.GetATCCustomizing(ctx)
+	if err != nil {
+		return newToolResultError(fmt.Sprintf("Failed to get ATC customizing: %v", err)), nil
 	}
 
 	output, _ := json.MarshalIndent(result, "", "  ")
