@@ -64,6 +64,18 @@ type AMDPBreakpoint struct {
 }
 
 // XML types for AMDP debugger responses
+
+// amdpStartParameters is returned by AMDPDebuggerStart
+type amdpStartParameters struct {
+	XMLName    xml.Name              `xml:"startParameters"`
+	Parameters []amdpStartParameter  `xml:"parameter"`
+}
+
+type amdpStartParameter struct {
+	Key   string `xml:"key,attr"`
+	Value string `xml:"value,attr"`
+}
+
 type amdpDebuggerResponse struct {
 	XMLName    xml.Name `xml:"debuggerResponse"`
 	MainID     string   `xml:"mainId,attr,omitempty"`
@@ -126,13 +138,24 @@ func (c *Client) AMDPDebuggerStart(ctx context.Context, user, cascadeMode string
 		return nil, fmt.Errorf("starting AMDP debugger: %w", err)
 	}
 
-	var debugResp amdpDebuggerResponse
-	if err := xml.Unmarshal(resp.Body, &debugResp); err != nil {
+	// Response is <startParameters> with HANA_SESSION_ID parameter
+	var startParams amdpStartParameters
+	if err := xml.Unmarshal(resp.Body, &startParams); err != nil {
 		return nil, fmt.Errorf("parsing AMDP debugger response: %w", err)
 	}
 
+	// Extract HANA_SESSION_ID as the mainId
+	var mainID string
+	for _, p := range startParams.Parameters {
+		if p.Key == "HANA_SESSION_ID" {
+			mainID = p.Value
+			break
+		}
+	}
+
 	return &AMDPDebugSession{
-		MainID:      debugResp.MainID,
+		MainID:      mainID,
+		HANASession: mainID,
 		User:        user,
 		CascadeMode: cascadeMode,
 	}, nil

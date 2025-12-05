@@ -102,15 +102,45 @@ Accept: "application/vnd.sap.adt.amdp.dbg.startmain.v1+xml"
 
 ---
 
+## Critical Finding: Session Binding
+
+**AMDP debugging requires persistent HTTP session context.**
+
+The debug session is bound to:
+1. HTTP session (cookies: `SAP_SESSIONID_*`, `sap-usercontext`)
+2. HANA session ID (`vhcala4hci:30203:300139`)
+
+### Problem
+
+Each MCP tool call creates a **new HTTP session**, so:
+- `AMDPDebuggerStart` creates a session but loses the HTTP context
+- Subsequent calls (`Resume`, `Stop`) can't access the session
+- Result: "Debugging already in use" lock error
+
+### Solutions
+
+| Approach | Complexity | Notes |
+|----------|------------|-------|
+| **Cookie persistence** | Medium | Store cookies in vsp state across calls |
+| **Single session mode** | Low | Keep one HTTP client alive for debug workflow |
+| **Eclipse ADT** | None | Use Eclipse for AMDP debugging (recommended) |
+
+### Workaround
+
+For now, AMDP debugging via MCP is **read-only exploration** of the API.
+Full debugging requires Eclipse ADT which maintains persistent sessions.
+
+---
+
 ## Recommendations
 
-1. **Document Debug Lock**: Add note that existing AMDP debug sessions must be released before starting new ones
+1. **Document Session Limitation**: AMDP debugging needs persistent HTTP session
 
-2. **Add Lock Detection**: Check for `DEBUGGEE_CONTEXT_LOCKED_BY_ME` error and provide helpful message
+2. **Implement Cookie Persistence**: Store/restore session cookies for debug workflows
 
-3. **Consider Force Flag**: Investigate if there's a force-release parameter for locked sessions
+3. **Add Lock Detection**: Check for `DEBUGGEE_CONTEXT_LOCKED_BY_ME` error
 
-4. **Test on Clean System**: Full AMDP debugging workflow should be tested on a system without existing debug locks
+4. **Consider Stateful Mode**: Add `--stateful` flag to maintain single HTTP session
 
 ---
 
