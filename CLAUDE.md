@@ -304,6 +304,10 @@ All research reports, analysis documents, and design specifications follow this 
 - **023:** VSP for ABAP Developers - Introduction article for developers and DevOps
 - **024:** AMDP Goroutine+Channel Architecture - Session persistence via Go concurrency (✅ Implemented)
 
+#### 2025-12-06 Reports
+- **001:** AMDP Breakpoint Investigation - Deep dive into ADT breakpoint API (parked)
+- **002:** AMDP Debugging Status & Progress Report - Current state, security audit, tool visibility update
+
 #### Reference Documentation (Non-numbered)
 - `abap-adt-discovery-guide.md` - ADT API discovery process
 - `adt-abap-internals-documentation.md` - Detailed ADT endpoint analysis
@@ -339,12 +343,12 @@ When creating a new report:
 
 | Metric | Value |
 |--------|-------|
-| **Tools** | 76 (49 focused, 76 expert) |
+| **Tools** | 76 (42 focused, 76 expert) |
 | **Unit Tests** | 270 |
 | **Integration Tests** | 34 |
 | **Platforms** | 9 |
 | **Phase** | 4 (Native ADT Features) - In Progress |
-| **Reports** | 20 numbered + 6 reference docs |
+| **Reports** | 22 numbered + 6 reference docs |
 | **Cache Package** | ✅ Complete (in-memory + SQLite) |
 | **Safety System** | ✅ Complete (operation filtering, package restrictions) |
 | **DSL Package** | ✅ Complete (fluent API, YAML workflows, test orchestration) |
@@ -356,7 +360,7 @@ When creating a new report:
 | **SQL Trace** | ✅ Complete (GetSQLTraceState, ListSQLTraces - ST05) |
 | **RAP OData E2E** | ✅ Complete (DDLS, SRVD, SRVB create + publish) |
 | **External Debugger** | ✅ Complete (Breakpoints, Debug Listener, Debuggee parsing) |
-| **AMDP Debugger** | ✅ Complete (Goroutine+Channel session manager - Report 024) |
+| **AMDP Debugger** | ⚠️ Experimental (Session works, breakpoints need investigation - expert mode only) |
 | **Transport Mgmt** | ✅ Complete (5 tools with safety controls - v2.11.0) |
 | **UI5/BSP Mgmt** | ✅ Partial (Read ops work; Create needs alternate API) |
 | **Tool Groups** | ✅ Complete (--disabled-groups: 5/U, T, H, D, C) |

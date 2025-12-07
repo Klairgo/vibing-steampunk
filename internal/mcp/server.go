@@ -148,7 +148,7 @@ func (s *Server) registerTools(mode string, disabledGroups string) {
 		},
 		"H": { // HANA/AMDP debugger
 			"AMDPDebuggerStart", "AMDPDebuggerResume", "AMDPDebuggerStop",
-			"AMDPDebuggerStep", "AMDPGetVariables", "AMDPSetBreakpoint",
+			"AMDPDebuggerStep", "AMDPGetVariables", "AMDPSetBreakpoint", "AMDPGetBreakpoints",
 		},
 		"D": { // ABAP debugger (external breakpoints + session)
 			"SetExternalBreakpoint", "GetExternalBreakpoints", "DeleteExternalBreakpoint",
@@ -199,11 +199,13 @@ func (s *Server) registerTools(mode string, disabledGroups string) {
 		"FindDefinition":  true,
 		"FindReferences":  true,
 
-		// Development tools (4)
-		"SyntaxCheck":   true,
-		"RunUnitTests":  true,
-		"RunATCCheck":   true, // Code quality checks
-		"Activate":      true, // Re-activate objects without editing
+		// Development tools (6)
+		"SyntaxCheck":         true,
+		"RunUnitTests":        true,
+		"RunATCCheck":         true, // Code quality checks
+		"Activate":            true, // Re-activate objects without editing
+		"PrettyPrint":         true, // Format ABAP code
+		"GetInactiveObjects":  true, // List pending activations
 
 		// Advanced/Edge cases (2)
 		"LockObject":   true,
@@ -257,13 +259,16 @@ func (s *Server) registerTools(mode string, disabledGroups string) {
 		// "UI5CreateApp":      true, // Create new UI5 app
 		// "UI5DeleteApp":      true, // Delete UI5 app
 
-		// AMDP (HANA) Debugger (5)
-		"AMDPDebuggerStart":  true, // Start AMDP debug session
-		"AMDPDebuggerResume": true, // Resume/wait for AMDP events
-		"AMDPDebuggerStop":   true, // Stop AMDP debug session
-		"AMDPDebuggerStep":   true, // Step through AMDP code
-		"AMDPGetVariables":   true, // Get AMDP variable values
-		"AMDPSetBreakpoint":  true, // Set AMDP breakpoint
+		// AMDP (HANA) Debugger - EXPERIMENTAL, expert mode only
+		// Session management works, but breakpoint triggering needs investigation.
+		// Enable with: --mode expert
+		// "AMDPDebuggerStart":  true,
+		// "AMDPDebuggerResume": true,
+		// "AMDPDebuggerStop":   true,
+		// "AMDPDebuggerStep":   true,
+		// "AMDPGetVariables":   true,
+		// "AMDPSetBreakpoint":  true,
+		// "AMDPGetBreakpoints": true,
 
 		// CTS/Transport Management (2 read-only in focused mode)
 		// Write operations (Create, Release, Delete) only in expert mode
@@ -807,7 +812,6 @@ func (s *Server) registerTools(mode string, disabledGroups string) {
 		),
 	), s.handleActivate)
 	}
-
 
 	// RunUnitTests
 	if shouldRegister("RunUnitTests") {
@@ -1705,6 +1709,13 @@ func (s *Server) registerTools(mode string, disabledGroups string) {
 				mcp.Description("Line number in the SQLScript code"),
 			),
 		), s.handleAMDPSetBreakpoint)
+	}
+
+	// AMDPGetBreakpoints
+	if shouldRegister("AMDPGetBreakpoints") {
+		s.mcpServer.AddTool(mcp.NewTool("AMDPGetBreakpoints",
+			mcp.WithDescription("Get all breakpoints registered in the current AMDP debug session. Useful for verifying breakpoints are set correctly."),
+		), s.handleAMDPGetBreakpoints)
 	}
 
 	// CTS/Transport Management Tools
@@ -4527,11 +4538,47 @@ func (s *Server) handleAMDPDebuggerResume(ctx context.Context, request mcp.CallT
 	sb.WriteString(fmt.Sprintf("Session ID: %s\n", state.SessionID))
 	sb.WriteString(fmt.Sprintf("Main ID: %s\n", state.MainID))
 	sb.WriteString(fmt.Sprintf("Status: %s\n", state.Status))
-	if state.CurrentProc != "" {
-		sb.WriteString(fmt.Sprintf("Current Procedure: %s\n", state.CurrentProc))
+
+	// Show last event info
+	if state.LastEventKind != "" {
+		sb.WriteString(fmt.Sprintf("Last Event: %s\n", state.LastEventKind))
 	}
-	if state.CurrentLine > 0 {
-		sb.WriteString(fmt.Sprintf("Current Line: %d\n", state.CurrentLine))
+	if !state.LastEventTime.IsZero() {
+		sb.WriteString(fmt.Sprintf("Event Time: %s\n", state.LastEventTime.Format("15:04:05")))
+	}
+
+	// Show breakpoint info if stopped at breakpoint
+	if state.Status == "breakpoint" {
+		sb.WriteString("\n=== BREAKPOINT HIT ===\n")
+		if state.DebuggeeID != "" {
+			sb.WriteString(fmt.Sprintf("Debuggee ID: %s\n", state.DebuggeeID))
+		}
+		if state.BreakPosition != nil {
+			sb.WriteString(fmt.Sprintf("Position: %s line %d\n", state.BreakPosition.ObjectName, state.BreakPosition.Line))
+		}
+		if len(state.CallStack) > 0 {
+			sb.WriteString("\nCall Stack:\n")
+			for _, frame := range state.CallStack {
+				sb.WriteString(fmt.Sprintf("  [%d] %s at %s:%d\n", frame.Level, frame.Name, frame.ObjectName, frame.Line))
+			}
+		}
+		if len(state.Variables) > 0 {
+			sb.WriteString("\nVariables:\n")
+			for _, v := range state.Variables {
+				if v.Type == "table" {
+					sb.WriteString(fmt.Sprintf("  %s: [TABLE %d rows]\n", v.Name, v.Rows))
+				} else {
+					sb.WriteString(fmt.Sprintf("  %s = %s (%s)\n", v.Name, v.Value, v.Type))
+				}
+			}
+		}
+	} else {
+		if state.CurrentProc != "" {
+			sb.WriteString(fmt.Sprintf("Current Procedure: %s\n", state.CurrentProc))
+		}
+		if state.CurrentLine > 0 {
+			sb.WriteString(fmt.Sprintf("Current Line: %d\n", state.CurrentLine))
+		}
 	}
 
 	return mcp.NewToolResultText(sb.String()), nil
@@ -4653,7 +4700,50 @@ func (s *Server) handleAMDPSetBreakpoint(ctx context.Context, request mcp.CallTo
 		return newToolResultError(fmt.Sprintf("Set breakpoint failed: %v", resp.Error)), nil
 	}
 
-	return mcp.NewToolResultText(fmt.Sprintf("AMDP breakpoint set at %s line %d", procName, line)), nil
+	// Include server response for debugging
+	respBody := ""
+	if resp.Data != nil {
+		if s, ok := resp.Data.(string); ok {
+			respBody = s
+		}
+	}
+
+	result := fmt.Sprintf("AMDP breakpoint set at %s line %d", procName, line)
+	if respBody != "" {
+		result += fmt.Sprintf("\n\nServer response:\n%s", respBody)
+	}
+	return mcp.NewToolResultText(result), nil
+}
+
+func (s *Server) handleAMDPGetBreakpoints(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Check for active session
+	if s.amdpSession == nil || !s.amdpSession.IsRunning() {
+		return newToolResultError("No active AMDP session. Use AMDPDebuggerStart first."), nil
+	}
+
+	// Send get breakpoints command via channel
+	resp, err := s.amdpSession.SendCommand(adt.AMDPCmdGetBreakpoints, nil)
+	if err != nil {
+		return newToolResultError(fmt.Sprintf("AMDPGetBreakpoints failed: %v", err)), nil
+	}
+
+	if resp.Error != nil {
+		return newToolResultError(fmt.Sprintf("Get breakpoints failed: %v", resp.Error)), nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString("AMDP Breakpoints:\n\n")
+
+	// Format response data
+	if bps, ok := resp.Data.([]map[string]interface{}); ok {
+		for _, bp := range bps {
+			if response, ok := bp["response"].(string); ok {
+				sb.WriteString(response)
+			}
+		}
+	}
+
+	return mcp.NewToolResultText(sb.String()), nil
 }
 
 // Transport Management Handlers

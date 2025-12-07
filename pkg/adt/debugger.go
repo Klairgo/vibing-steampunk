@@ -277,18 +277,18 @@ func buildBreakpointRequestXML(req *BreakpointRequest) (string, error) {
 			if bp.Condition != "" {
 				attrs += fmt.Sprintf(` condition="%s"`, xmlEscape(bp.Condition))
 			}
-			bpElements = append(bpElements, fmt.Sprintf(`<breakpoint %s/>`, attrs))
+			bpElements = append(bpElements, fmt.Sprintf(`<dbg:breakpoint %s/>`, attrs))
 
 		case BreakpointKindException:
-			bpElements = append(bpElements, fmt.Sprintf(`<breakpoint kind="exception" exceptionClass="%s"/>`,
+			bpElements = append(bpElements, fmt.Sprintf(`<dbg:breakpoint kind="exception" exceptionClass="%s"/>`,
 				xmlEscape(bp.Exception)))
 
 		case BreakpointKindStatement:
-			bpElements = append(bpElements, fmt.Sprintf(`<breakpoint kind="statement" statement="%s"/>`,
+			bpElements = append(bpElements, fmt.Sprintf(`<dbg:breakpoint kind="statement" statement="%s"/>`,
 				xmlEscape(bp.Statement)))
 
 		case BreakpointKindMessage:
-			bpElements = append(bpElements, fmt.Sprintf(`<breakpoint kind="message" msgId="%s" msgTy="%s"/>`,
+			bpElements = append(bpElements, fmt.Sprintf(`<dbg:breakpoint kind="message" msgId="%s" msgTy="%s"/>`,
 				xmlEscape(bp.MessageID), xmlEscape(bp.MessageType)))
 		}
 	}
