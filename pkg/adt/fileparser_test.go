@@ -203,3 +203,173 @@ ENDCLASS.
 		t.Error("Expected HasTestClasses to be true")
 	}
 }
+
+// TestExtractClassNameFromFilename tests the helper function for extracting
+// class names from abapGit-style filenames.
+func TestExtractClassNameFromFilename(t *testing.T) {
+	tests := []struct {
+		filename string
+		expected string
+	}{
+		{"zcl_foo.clas.abap", "ZCL_FOO"},
+		{"zcl_foo.clas.testclasses.abap", "ZCL_FOO"},
+		{"zcl_foo.clas.locals_def.abap", "ZCL_FOO"},
+		{"zcl_foo.clas.locals_imp.abap", "ZCL_FOO"},
+		{"zcl_foo.clas.macros.abap", "ZCL_FOO"},
+		{"ZCL_ZORK_00_IO_CONSOLE.clas.testclasses.abap", "ZCL_ZORK_00_IO_CONSOLE"},
+		{"/path/to/zcl_test.clas.testclasses.abap", "ZCL_TEST"},
+		{"my_class.clas.abap", "MY_CLASS"},
+		{"test.prog.abap", ""}, // Not a class file
+		{"random.txt", ""},     // Not a class file
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			result := extractClassNameFromFilename(tt.filename)
+			if result != tt.expected {
+				t.Errorf("extractClassNameFromFilename(%q) = %q, want %q", tt.filename, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestParseABAPFile_TestClassesInclude tests parsing of .clas.testclasses.abap files.
+// The class name should come from the FILENAME, not from local test classes in the content.
+func TestParseABAPFile_TestClassesInclude(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Filename: zcl_zork_00_io_console.clas.testclasses.abap
+	// Parent class should be: ZCL_ZORK_00_IO_CONSOLE
+	filePath := filepath.Join(tmpDir, "zcl_zork_00_io_console.clas.testclasses.abap")
+
+	// Content contains local test class LTCL_IO_CONSOLE_TEST - should NOT be used as object name
+	source := `*"* use this source file for your ABAP unit test classes
+CLASS ltcl_io_console_test DEFINITION FINAL FOR TESTING
+  DURATION SHORT
+  RISK LEVEL HARMLESS.
+
+  PRIVATE SECTION.
+    DATA mo_cut TYPE REF TO zcl_zork_00_io_console.
+    METHODS test_read FOR TESTING.
+    METHODS test_write FOR TESTING.
+ENDCLASS.
+
+CLASS ltcl_io_console_test IMPLEMENTATION.
+  METHOD test_read.
+    " Test implementation
+  ENDMETHOD.
+  METHOD test_write.
+    " Test implementation
+  ENDMETHOD.
+ENDCLASS.
+`
+	if err := os.WriteFile(filePath, []byte(source), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := ParseABAPFile(filePath)
+	if err != nil {
+		t.Fatalf("ParseABAPFile failed: %v", err)
+	}
+
+	// Object name should be from filename, NOT from content
+	if info.ObjectName != "ZCL_ZORK_00_IO_CONSOLE" {
+		t.Errorf("Expected ObjectName ZCL_ZORK_00_IO_CONSOLE (from filename), got %s", info.ObjectName)
+	}
+	if info.ObjectType != ObjectTypeClass {
+		t.Errorf("Expected ObjectType %s, got %s", ObjectTypeClass, info.ObjectType)
+	}
+	if info.ClassIncludeType != ClassIncludeTestClasses {
+		t.Errorf("Expected ClassIncludeType %s, got %s", ClassIncludeTestClasses, info.ClassIncludeType)
+	}
+	if !info.HasTestClasses {
+		t.Error("Expected HasTestClasses to be true")
+	}
+}
+
+// TestParseABAPFile_LocalsDefInclude tests parsing of .clas.locals_def.abap files.
+func TestParseABAPFile_LocalsDefInclude(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "zcl_my_class.clas.locals_def.abap")
+
+	source := `*"* use this source file for any type of declarations
+INTERFACE lif_helper.
+  METHODS do_something.
+ENDINTERFACE.
+
+CLASS lcl_helper DEFINITION.
+  PUBLIC SECTION.
+    INTERFACES lif_helper.
+ENDCLASS.
+`
+	if err := os.WriteFile(filePath, []byte(source), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := ParseABAPFile(filePath)
+	if err != nil {
+		t.Fatalf("ParseABAPFile failed: %v", err)
+	}
+
+	if info.ObjectName != "ZCL_MY_CLASS" {
+		t.Errorf("Expected ObjectName ZCL_MY_CLASS, got %s", info.ObjectName)
+	}
+	if info.ClassIncludeType != ClassIncludeDefinitions {
+		t.Errorf("Expected ClassIncludeType %s, got %s", ClassIncludeDefinitions, info.ClassIncludeType)
+	}
+}
+
+// TestParseABAPFile_LocalsImpInclude tests parsing of .clas.locals_imp.abap files.
+func TestParseABAPFile_LocalsImpInclude(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "zcl_my_class.clas.locals_imp.abap")
+
+	source := `*"* use this source file for implementation of local classes
+CLASS lcl_helper IMPLEMENTATION.
+  METHOD lif_helper~do_something.
+    " Implementation
+  ENDMETHOD.
+ENDCLASS.
+`
+	if err := os.WriteFile(filePath, []byte(source), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := ParseABAPFile(filePath)
+	if err != nil {
+		t.Fatalf("ParseABAPFile failed: %v", err)
+	}
+
+	if info.ObjectName != "ZCL_MY_CLASS" {
+		t.Errorf("Expected ObjectName ZCL_MY_CLASS, got %s", info.ObjectName)
+	}
+	if info.ClassIncludeType != ClassIncludeImplementations {
+		t.Errorf("Expected ClassIncludeType %s, got %s", ClassIncludeImplementations, info.ClassIncludeType)
+	}
+}
+
+// TestParseABAPFile_MacrosInclude tests parsing of .clas.macros.abap files.
+func TestParseABAPFile_MacrosInclude(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "zcl_my_class.clas.macros.abap")
+
+	source := `*"* use this source file for any macro definitions
+DEFINE my_macro.
+  WRITE: / &1.
+END-OF-DEFINITION.
+`
+	if err := os.WriteFile(filePath, []byte(source), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := ParseABAPFile(filePath)
+	if err != nil {
+		t.Fatalf("ParseABAPFile failed: %v", err)
+	}
+
+	if info.ObjectName != "ZCL_MY_CLASS" {
+		t.Errorf("Expected ObjectName ZCL_MY_CLASS, got %s", info.ObjectName)
+	}
+	if info.ClassIncludeType != ClassIncludeMacros {
+		t.Errorf("Expected ClassIncludeType %s, got %s", ClassIncludeMacros, info.ClassIncludeType)
+	}
+}

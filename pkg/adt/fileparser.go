@@ -21,6 +21,35 @@ type ABAPFileInfo struct {
 	HasTestClasses    bool
 }
 
+// extractClassNameFromFilename extracts the parent class name from abapGit-style filenames.
+// Examples:
+//   - zcl_foo.clas.testclasses.abap → ZCL_FOO
+//   - zcl_foo.clas.locals_def.abap → ZCL_FOO
+//   - zcl_foo.clas.locals_imp.abap → ZCL_FOO
+//   - zcl_foo.clas.macros.abap → ZCL_FOO
+//   - zcl_foo.clas.abap → ZCL_FOO
+func extractClassNameFromFilename(filePath string) string {
+	baseName := filepath.Base(filePath)
+
+	// Remove known suffixes in order of specificity
+	suffixes := []string{
+		".clas.testclasses.abap",
+		".clas.locals_def.abap",
+		".clas.locals_imp.abap",
+		".clas.macros.abap",
+		".clas.abap",
+	}
+
+	for _, suffix := range suffixes {
+		if strings.HasSuffix(strings.ToLower(baseName), suffix) {
+			name := baseName[:len(baseName)-len(suffix)]
+			return strings.ToUpper(name)
+		}
+	}
+
+	return ""
+}
+
 // ParseABAPFile analyzes an ABAP source file and extracts metadata.
 // It detects the object type from file extension and parses the content
 // to extract the object name and other metadata.
@@ -34,18 +63,23 @@ func ParseABAPFile(filePath string) (*ABAPFileInfo, error) {
 	baseName := filepath.Base(filePath)
 	switch {
 	// Class includes (must be before .clas.abap)
+	// For class includes, extract the class name from the filename, not content
 	case strings.HasSuffix(baseName, ".clas.testclasses.abap"):
 		info.ObjectType = ObjectTypeClass
 		info.ClassIncludeType = ClassIncludeTestClasses
+		info.ObjectName = extractClassNameFromFilename(filePath)
 	case strings.HasSuffix(baseName, ".clas.locals_def.abap"):
 		info.ObjectType = ObjectTypeClass
 		info.ClassIncludeType = ClassIncludeDefinitions
+		info.ObjectName = extractClassNameFromFilename(filePath)
 	case strings.HasSuffix(baseName, ".clas.locals_imp.abap"):
 		info.ObjectType = ObjectTypeClass
 		info.ClassIncludeType = ClassIncludeImplementations
+		info.ObjectName = extractClassNameFromFilename(filePath)
 	case strings.HasSuffix(baseName, ".clas.macros.abap"):
 		info.ObjectType = ObjectTypeClass
 		info.ClassIncludeType = ClassIncludeMacros
+		info.ObjectName = extractClassNameFromFilename(filePath)
 	// Main class
 	case strings.HasSuffix(baseName, ".clas.abap"):
 		info.ObjectType = ObjectTypeClass
@@ -90,8 +124,12 @@ func ParseABAPFile(filePath string) (*ABAPFileInfo, error) {
 		// Parse based on object type
 		switch info.ObjectType {
 		case ObjectTypeClass:
-			if name := parseClassName(line); name != "" {
-				info.ObjectName = name
+			// For class includes (testclasses, locals_def, etc.), the name is already
+			// extracted from the filename. Only parse from content for main class files.
+			if info.ObjectName == "" {
+				if name := parseClassName(line); name != "" {
+					info.ObjectName = name
+				}
 			}
 			if strings.Contains(strings.ToUpper(line), "DEFINITION") {
 				info.HasDefinition = true
