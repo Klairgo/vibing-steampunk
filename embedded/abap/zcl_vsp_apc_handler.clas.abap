@@ -55,6 +55,7 @@ CLASS zcl_vsp_apc_handler IMPLEMENTATION.
   METHOD class_constructor.
     " Register available services
     APPEND NEW zcl_vsp_rfc_service( ) TO gt_services.
+    APPEND NEW zcl_vsp_debug_service( ) TO gt_services.
   ENDMETHOD.
 
 
@@ -74,7 +75,7 @@ CLASS zcl_vsp_apc_handler IMPLEMENTATION.
     " Send welcome message
     DATA(lv_brace_open) = '{'.
     DATA(lv_brace_close) = '}'.
-    DATA(lv_data) = |{ lv_brace_open }"session":"{ mv_session_id }","version":"1.0.0","domains":["rfc"]{ lv_brace_close }|.
+    DATA(lv_data) = |{ lv_brace_open }"session":"{ mv_session_id }","version":"1.1.0","domains":["rfc","debug"]{ lv_brace_close }|.
 
     send_response( VALUE #(
       id      = 'welcome'
