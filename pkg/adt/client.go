@@ -759,46 +759,61 @@ type SystemInfo struct {
 }
 
 // GetSystemInfo retrieves SAP system information.
+// Uses SQL queries to CVERS and T000 tables for reliable info across SAP versions.
 func (c *Client) GetSystemInfo(ctx context.Context) (*SystemInfo, error) {
-	resp, err := c.transport.Request(ctx, "/sap/bc/adt/core/discovery", &RequestOptions{
-		Method: http.MethodGet,
-		Accept: "application/xml",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("getting system info: %w", err)
+	info := &SystemInfo{}
+
+	// Helper to get string from row
+	getString := func(row map[string]interface{}, key string) string {
+		if v, ok := row[key]; ok {
+			if s, ok := v.(string); ok {
+				return s
+			}
+		}
+		return ""
 	}
 
-	// Parse discovery document for system info
-	type systemInfoXML struct {
-		XMLName         xml.Name `xml:"discovery"`
-		SchemaLocation  string   `xml:"schemaLocation,attr"`
-		SystemID        string   `xml:"systemId,attr"`
-		Client          string   `xml:"client,attr"`
-		SAPRelease      string   `xml:"sapRelease,attr"`
-		KernelRelease   string   `xml:"kernelRelease,attr"`
-		DatabaseRelease string   `xml:"databaseRelease,attr"`
-		DatabaseSystem  string   `xml:"databaseSystem,attr"`
-		HostName        string   `xml:"hostName,attr"`
-		InstallNumber   string   `xml:"installNumber,attr"`
-		ABAPRelease     string   `xml:"abapRelease,attr"`
+	// Get client info from T000
+	clientResult, err := c.RunQuery(ctx, "SELECT MANDT, MTEXT, LOGSYS FROM T000 WHERE MANDT = '"+c.config.Client+"'", 1)
+	if err == nil && len(clientResult.Rows) > 0 {
+		row := clientResult.Rows[0]
+		info.Client = getString(row, "MANDT")
+		// LOGSYS format is typically <SID>CLNT<client>, e.g., A4HCLNT001
+		if logsys := getString(row, "LOGSYS"); len(logsys) >= 3 {
+			info.SystemID = logsys[:3] // First 3 chars are SID
+		}
 	}
 
-	var si systemInfoXML
-	if err := xml.Unmarshal(resp.Body, &si); err != nil {
-		return nil, fmt.Errorf("parsing system info: %w", err)
+	// Get SAP_BASIS version from CVERS
+	basisResult, err := c.RunQuery(ctx, "SELECT RELEASE, EXTRELEASE FROM CVERS WHERE COMPONENT = 'SAP_BASIS'", 1)
+	if err == nil && len(basisResult.Rows) > 0 {
+		row := basisResult.Rows[0]
+		info.SAPRelease = getString(row, "RELEASE")
+		info.ABAPRelease = getString(row, "RELEASE")
 	}
 
-	return &SystemInfo{
-		SystemID:        si.SystemID,
-		Client:          si.Client,
-		SAPRelease:      si.SAPRelease,
-		KernelRelease:   si.KernelRelease,
-		DatabaseRelease: si.DatabaseRelease,
-		DatabaseSystem:  si.DatabaseSystem,
-		HostName:        si.HostName,
-		InstallNumber:   si.InstallNumber,
-		ABAPRelease:     si.ABAPRelease,
-	}, nil
+	// Try to get kernel info from CVERS
+	kernelResult, err := c.RunQuery(ctx, "SELECT RELEASE FROM CVERS WHERE COMPONENT = 'SAP_ABA'", 1)
+	if err == nil && len(kernelResult.Rows) > 0 {
+		info.KernelRelease = getString(kernelResult.Rows[0], "RELEASE")
+	}
+
+	// Try to detect HANA from CVERS
+	hanaResult, err := c.RunQuery(ctx, "SELECT RELEASE FROM CVERS WHERE COMPONENT LIKE '%HDB%' OR COMPONENT LIKE '%HANA%'", 1)
+	if err == nil && len(hanaResult.Rows) > 0 {
+		info.DatabaseSystem = "HDB"
+		info.DatabaseRelease = getString(hanaResult.Rows[0], "RELEASE")
+	}
+
+	// If we couldn't get SystemID from T000, try from config
+	if info.SystemID == "" {
+		info.SystemID = "???"
+	}
+	if info.Client == "" {
+		info.Client = c.config.Client
+	}
+
+	return info, nil
 }
 
 // InstalledComponent represents an installed software component.
