@@ -11,6 +11,15 @@
 
 ## What's New
 
+**v2.20.0** - CLI Mode & Multi-System Management
+- **CLI Subcommands**: `vsp search`, `vsp source`, `vsp export`, `vsp systems` - direct ABAP operations without MCP
+- **System Profiles**: `.vsp.json` config file for managing multiple SAP systems
+- **Config Conversion**: `vsp config mcp-to-vsp` / `vsp-to-mcp` - convert between config formats
+- **Cookie Auth in Profiles**: Support `cookie_file` / `cookie_string` for SSO environments
+- **Password Sync**: Passwords imported from `.mcp.json` env blocks automatically
+- **GitExport FULL Mode**: Multi-package exports with proper folder hierarchy (`src/$package/`)
+- **abapGit Compatible**: Exports now include `.abapgit.xml` with FULL folder logic
+
 **v2.19.0** - Async Execution & Developer Productivity
 - **RunReportAsync**: Execute reports in background goroutine - no more timeouts!
 - **GetAsyncResult**: Poll or wait for async task completion (up to 60s)
