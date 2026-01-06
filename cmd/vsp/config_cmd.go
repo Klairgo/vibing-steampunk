@@ -15,6 +15,8 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 	configCmd.AddCommand(configInitCmd)
 	configCmd.AddCommand(configShowCmd)
+	configCmd.AddCommand(mcpToVspCmd)
+	configCmd.AddCommand(vspToMcpCmd)
 }
 
 var configCmd = &cobra.Command{
@@ -202,6 +204,257 @@ func loadMCPConfig() (map[string]interface{}, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// --- mcp-to-vsp command ---
+
+var mcpToVspCmd = &cobra.Command{
+	Use:   "mcp-to-vsp",
+	Short: "Import systems from .mcp.json to .vsp.json",
+	Long: `Parse .mcp.json and create/update .vsp.json with system entries.
+
+For each vsp-* server in .mcp.json, extracts:
+  - URL from --url arg
+  - User from --user arg
+  - Client from --client arg
+  - Other settings
+
+Passwords are NOT imported (use VSP_<SYSTEM>_PASSWORD env vars).`,
+	RunE: runMcpToVsp,
+}
+
+func runMcpToVsp(cmd *cobra.Command, args []string) error {
+	mcpCfg, err := loadMCPConfig()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf(".mcp.json not found in current directory")
+		}
+		return fmt.Errorf("failed to read .mcp.json: %w", err)
+	}
+
+	servers, ok := mcpCfg["mcpServers"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("no mcpServers found in .mcp.json")
+	}
+
+	// Load existing .vsp.json or create new
+	vspCfg, _, _ := config.LoadSystems()
+	if vspCfg == nil {
+		vspCfg = &config.SystemsConfig{
+			Systems: make(map[string]config.SystemConfig),
+		}
+	}
+
+	imported := 0
+	for name, server := range servers {
+		serverMap, ok := server.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Parse args to extract settings
+		sys := parseServerArgs(serverMap)
+		if sys.URL == "" {
+			fmt.Printf("  SKIP %s (no URL found)\n", name)
+			continue
+		}
+
+		// Determine system name (strip 'vsp-' prefix if present)
+		sysName := name
+		if strings.HasPrefix(name, "vsp-") {
+			sysName = strings.TrimPrefix(name, "vsp-")
+		} else if name == "vsp" {
+			sysName = "default"
+		}
+
+		// Check if exists
+		action := "ADD"
+		if _, exists := vspCfg.Systems[sysName]; exists {
+			action = "UPDATE"
+		}
+
+		vspCfg.Systems[sysName] = sys
+		fmt.Printf("  %s %s: %s [%s@%s]\n", action, sysName, sys.URL, sys.User, sys.Client)
+		imported++
+
+		// Set first system as default if none set
+		if vspCfg.Default == "" {
+			vspCfg.Default = sysName
+		}
+	}
+
+	if imported == 0 {
+		fmt.Println("No vsp servers found in .mcp.json")
+		return nil
+	}
+
+	// Write .vsp.json
+	data, err := json.MarshalIndent(vspCfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(".vsp.json", data, 0600); err != nil {
+		return fmt.Errorf("failed to write .vsp.json: %w", err)
+	}
+
+	fmt.Printf("\nImported %d systems to .vsp.json\n", imported)
+	fmt.Println("Set passwords via: VSP_<SYSTEM>_PASSWORD environment variables")
+	return nil
+}
+
+func parseServerArgs(serverMap map[string]interface{}) config.SystemConfig {
+	sys := config.SystemConfig{
+		Client:   "001",
+		Language: "EN",
+	}
+
+	// Parse args array
+	if args, ok := serverMap["args"].([]interface{}); ok {
+		for i := 0; i < len(args)-1; i++ {
+			arg := fmt.Sprint(args[i])
+			val := fmt.Sprint(args[i+1])
+
+			switch arg {
+			case "--url", "-u":
+				sys.URL = val
+			case "--user":
+				sys.User = val
+			case "--client":
+				sys.Client = val
+			case "--language":
+				sys.Language = val
+			case "--insecure":
+				sys.Insecure = true
+				continue // insecure is a flag, not key-value
+			case "--read-only":
+				sys.ReadOnly = true
+				continue
+			}
+		}
+		// Check for standalone flags
+		for _, arg := range args {
+			switch fmt.Sprint(arg) {
+			case "--insecure":
+				sys.Insecure = true
+			case "--read-only":
+				sys.ReadOnly = true
+			}
+		}
+	}
+
+	// Also check env block for URL/user if not found in args
+	if env, ok := serverMap["env"].(map[string]interface{}); ok {
+		if sys.URL == "" {
+			if url, ok := env["SAP_URL"].(string); ok {
+				sys.URL = url
+			}
+		}
+		if sys.User == "" {
+			if user, ok := env["SAP_USER"].(string); ok {
+				sys.User = user
+			}
+		}
+	}
+
+	return sys
+}
+
+// --- vsp-to-mcp command ---
+
+var vspToMcpCmd = &cobra.Command{
+	Use:   "vsp-to-mcp",
+	Short: "Export systems from .vsp.json to .mcp.json",
+	Long: `Generate .mcp.json entries from .vsp.json systems.
+
+Creates mcpServers entries for each system in .vsp.json.
+Passwords are placed in the 'env' block (you need to fill them in).`,
+	RunE: runVspToMcp,
+}
+
+func runVspToMcp(cmd *cobra.Command, args []string) error {
+	vspCfg, path, err := config.LoadSystems()
+	if err != nil {
+		return fmt.Errorf("failed to load .vsp.json: %w", err)
+	}
+	if vspCfg == nil {
+		return fmt.Errorf(".vsp.json not found. Run 'vsp config init' first")
+	}
+
+	fmt.Printf("Reading from: %s\n\n", path)
+
+	// Load existing .mcp.json or create new
+	mcpCfg, _ := loadMCPConfig()
+	if mcpCfg == nil {
+		mcpCfg = make(map[string]interface{})
+	}
+
+	servers, ok := mcpCfg["mcpServers"].(map[string]interface{})
+	if !ok {
+		servers = make(map[string]interface{})
+		mcpCfg["mcpServers"] = servers
+	}
+
+	// Get executable path
+	execPath, _ := os.Executable()
+	if execPath == "" {
+		execPath = "vsp"
+	}
+
+	exported := 0
+	for name, sys := range vspCfg.Systems {
+		// Build server entry
+		serverName := "vsp"
+		if name != "default" && name != vspCfg.Default {
+			serverName = "vsp-" + name
+		}
+
+		serverArgs := []string{
+			"--url", sys.URL,
+			"--user", sys.User,
+			"--client", sys.Client,
+		}
+		if sys.Insecure {
+			serverArgs = append(serverArgs, "--insecure")
+		}
+		if sys.ReadOnly {
+			serverArgs = append(serverArgs, "--read-only")
+		}
+		if len(sys.AllowedPackages) > 0 {
+			serverArgs = append(serverArgs, "--allowed-packages", strings.Join(sys.AllowedPackages, ","))
+		}
+
+		server := map[string]interface{}{
+			"command": execPath,
+			"args":    serverArgs,
+			"env": map[string]string{
+				"SAP_PASSWORD": "YOUR_PASSWORD_HERE",
+			},
+		}
+
+		action := "ADD"
+		if _, exists := servers[serverName]; exists {
+			action = "UPDATE"
+		}
+
+		servers[serverName] = server
+		fmt.Printf("  %s %s: %s [%s]\n", action, serverName, sys.URL, sys.User)
+		exported++
+	}
+
+	// Write .mcp.json
+	data, err := json.MarshalIndent(mcpCfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(".mcp.json", data, 0600); err != nil {
+		return fmt.Errorf("failed to write .mcp.json: %w", err)
+	}
+
+	fmt.Printf("\nExported %d systems to .mcp.json\n", exported)
+	fmt.Println("IMPORTANT: Edit .mcp.json and fill in SAP_PASSWORD values!")
+	return nil
 }
 
 // Example configuration files
