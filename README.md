@@ -11,6 +11,13 @@
 
 ## What's New
 
+**v2.22.0** - SAP GUI Debugger Integration
+- **SAP_TERMINAL_ID**: Share breakpoints between vsp and SAP GUI sessions
+- **MoveObject Tool**: Move ABAP objects between packages (via ZADT_VSP WebSocket)
+- **RunReport Refactor**: Uses background jobs with spool output - more reliable execution
+- **Cross-Tool Debugging**: Set breakpoint in vsp, hit it in SAP GUI (or vice versa)
+- Configure: `--terminal-id <id>` or `SAP_TERMINAL_ID=<id>` (get ID from SAP GUI registry/file)
+
 **v2.21.0** - Method-Level Source Operations
 - **GetSource with `method`**: Returns only the `METHOD...ENDMETHOD` block (~50 lines vs 1000+)
 - **EditSource with `method`**: Constrains find/replace to specific method - no accidental edits elsewhere
@@ -280,6 +287,7 @@ SAP_PASSWORD=secret
 | `--mode` | `SAP_MODE` | `focused` (default) or `expert` |
 | `--cookie-file` | `SAP_COOKIE_FILE` | Netscape cookie file |
 | `--insecure` | `SAP_INSECURE` | Skip TLS verification |
+| `--terminal-id` | `SAP_TERMINAL_ID` | SAP GUI terminal ID for cross-tool debugging |
 
 </details>
 
@@ -440,7 +448,7 @@ See [AI-Powered RCA Workflows](reports/2025-12-05-013-ai-powered-rca-workflows.m
 - **Read:** GetSource, GetTable, GetTableContents, RunQuery, GetPackage, GetFunctionGroup, GetCDSDependencies
 - **Debugger:** DebuggerListen, DebuggerAttach, DebuggerDetach, DebuggerStep, DebuggerGetStack, DebuggerGetVariables
   - *Note: Breakpoints now managed via WebSocket (ZADT_VSP)*
-- **Write:** WriteSource, EditSource, ImportFromFile, ExportToFile
+- **Write:** WriteSource, EditSource, ImportFromFile, ExportToFile, MoveObject
 - **Dev:** SyntaxCheck, RunUnitTests, RunATCCheck, LockObject, UnlockObject
 - **Intelligence:** FindDefinition, FindReferences
 - **System:** GetSystemInfo, GetInstalledComponents, GetCallGraph, GetObjectStructure, GetFeatures
