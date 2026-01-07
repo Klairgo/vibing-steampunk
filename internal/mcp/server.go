@@ -81,6 +81,9 @@ type Config struct {
 	FeatureAMDP      string // AMDP/HANA debugger
 	FeatureUI5       string // UI5/Fiori BSP management
 	FeatureTransport string // CTS transport management (distinct from EnableTransports safety)
+
+	// Debugger configuration
+	TerminalID string // SAP GUI terminal ID for cross-tool breakpoint sharing
 }
 
 // NewServer creates a new MCP server for ABAP ADT tools.
@@ -130,8 +133,11 @@ func NewServer(cfg *Config) *Server {
 
 	adtClient := adt.NewClient(cfg.BaseURL, cfg.Username, cfg.Password, opts...)
 
-	// Set deterministic terminal ID for debugger operations
-	// This ensures breakpoints work across MCP tool calls (each is a separate process)
+	// Set terminal ID for debugger operations
+	// Priority: 1) Custom ID (SAP GUI), 2) User-based ID
+	if cfg.TerminalID != "" {
+		adt.SetTerminalID(cfg.TerminalID)
+	}
 	adt.SetTerminalIDUser(cfg.Username)
 
 	// Configure feature detection (safety network)

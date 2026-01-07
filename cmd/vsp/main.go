@@ -91,6 +91,9 @@ func init() {
 	rootCmd.Flags().StringVar(&cfg.FeatureUI5, "feature-ui5", "auto", "UI5/Fiori BSP management: auto, on, off")
 	rootCmd.Flags().StringVar(&cfg.FeatureTransport, "feature-transport", "auto", "CTS transport management: auto, on, off")
 
+	// Debugger configuration
+	rootCmd.Flags().StringVar(&cfg.TerminalID, "terminal-id", "", "SAP GUI terminal ID for cross-tool breakpoint sharing")
+
 	// Output options
 	rootCmd.Flags().BoolVarP(&cfg.Verbose, "verbose", "v", false, "Enable verbose output to stderr")
 
@@ -121,6 +124,9 @@ func init() {
 	viper.BindPFlag("feature-amdp", rootCmd.Flags().Lookup("feature-amdp"))
 	viper.BindPFlag("feature-ui5", rootCmd.Flags().Lookup("feature-ui5"))
 	viper.BindPFlag("feature-transport", rootCmd.Flags().Lookup("feature-transport"))
+
+	// Debugger configuration
+	viper.BindPFlag("terminal-id", rootCmd.Flags().Lookup("terminal-id"))
 
 	// Set up environment variable mapping
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
@@ -315,6 +321,13 @@ func resolveConfig(cmd *cobra.Command) {
 	if !cmd.Flags().Changed("feature-transport") {
 		if v := viper.GetString("FEATURE_TRANSPORT"); v != "" {
 			cfg.FeatureTransport = v
+		}
+	}
+
+	// Terminal ID for debugger: flag > SAP_TERMINAL_ID env
+	if !cmd.Flags().Changed("terminal-id") {
+		if v := viper.GetString("TERMINAL_ID"); v != "" {
+			cfg.TerminalID = v
 		}
 	}
 }

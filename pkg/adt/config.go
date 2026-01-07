@@ -46,6 +46,8 @@ type Config struct {
 	Safety SafetyConfig
 	// Features controls optional feature detection and enablement
 	Features FeatureConfig
+	// TerminalID for debugger session (shared with SAP GUI for cross-tool debugging)
+	TerminalID string
 }
 
 // Option is a functional option for configuring the ADT client.
@@ -188,6 +190,16 @@ func NewConfig(baseURL, username, password string, opts ...Option) *Config {
 func WithFeatures(features FeatureConfig) Option {
 	return func(c *Config) {
 		c.Features = features
+	}
+}
+
+// WithTerminalID sets the debugger terminal ID.
+// Use the same ID as SAP GUI to enable cross-tool breakpoint sharing.
+// SAP GUI stores this in: Windows Registry HKCU\Software\SAP\ABAP Debugging\TerminalID
+// or on Linux/Mac: ~/.SAP/ABAPDebugging/terminalId
+func WithTerminalID(terminalID string) Option {
+	return func(c *Config) {
+		c.TerminalID = terminalID
 	}
 }
 

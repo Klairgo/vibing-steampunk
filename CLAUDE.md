@@ -434,47 +434,50 @@ pipeline := dsl.RAPPipeline(client, "./src/", "$ZRAY", "ZTRAVEL_SB")
 
 ---
 
-## Last Session Reference (2026-01-06)
+## Last Session Reference (2026-01-07)
 
-### Objective: Method-Level Source Operations - COMPLETED ✅
+### Objective: SAP GUI Terminal ID Integration - COMPLETED ✅
 
-Added `method` parameter support to GetSource, EditSource, and WriteSource for working with individual class methods instead of entire classes.
+Added `SAP_TERMINAL_ID` config to enable cross-tool breakpoint sharing with SAP GUI.
 
-### What Was Completed
+### What Was Done
 
-1. ✅ **GetSource with `method`** - Returns only the `METHOD...ENDMETHOD` block
-2. ✅ **EditSource with `method`** - Constrains find/replace to specific method
-3. ✅ **WriteSource with `method`** - Replace only one method implementation (NEW)
-4. ✅ **95% Token Reduction** - Work with ~50 lines instead of 1000+ for large classes
-5. ✅ **All Tests Pass** - Unit tests and integration tests verified
+1. ✅ **Merged Community PRs** (#4, #6 from vitalratel)
+   - MoveObject tool, WebSocket refactoring, ZCL_VSP_UTILS
 
-### Files Updated
+2. ✅ **Terminal ID Feature** - SAP GUI breakpoint compatibility
+   - Added `--terminal-id` CLI flag
+   - Added `SAP_TERMINAL_ID` env variable support
+   - Updated `pkg/adt/config.go` - `TerminalID` field + `WithTerminalID()` option
+   - Updated `pkg/adt/debugger.go` - `SetTerminalID()` function, priority: custom > user-based > default
+   - Updated `internal/mcp/server.go` - Config field + initialization
+   - Updated `cmd/vsp/main.go` - flag + viper binding
 
-| File | Changes |
-|------|---------|
-| `pkg/adt/workflows.go` | Added `Method` to WriteSourceOptions/Result, `writeClassMethodUpdate()` |
-| `internal/mcp/handlers_codeintel.go` | Added `method` parameter to WriteSource tool |
+### How It Works
 
-### Usage Examples
+SAP GUI stores terminal ID in:
+- **Windows**: Registry `HKCU\Software\SAP\ABAP Debugging\TerminalID`
+- **Linux/Mac**: File `~/.SAP/ABAPDebugging/terminalId`
 
-```go
-// Get only one method (95% smaller response)
-source, _ := client.GetSource(ctx, "CLAS", "ZCL_TEST", &GetSourceOptions{Method: "CALCULATE"})
+By configuring vsp to use the same terminal ID, breakpoints set by vsp can be hit by SAP GUI sessions!
 
-// Edit within one method (prevents accidental changes elsewhere)
-result, _ := client.EditSourceWithOptions(ctx, url, old, new, &EditSourceOptions{Method: "PROCESS"})
+### Configuration
 
-// Replace entire method implementation
-result, _ := client.WriteSource(ctx, "CLAS", "ZCL_TEST", methodSource, &WriteSourceOptions{Method: "HANDLE_REQUEST"})
+```bash
+# .env file
+SAP_TERMINAL_ID=D0C586D015974B75BFB2A306A4A13AEA
+
+# Or CLI
+vsp --terminal-id D0C586D015974B75BFB2A306A4A13AEA
 ```
 
-### Why This Matters
+### TODO
 
-- **Token Efficiency**: AI context reduced by 95% for method-level work
-- **Precision**: No risk of unintended edits in other methods
-- **Safety**: Method must exist - prevents creating methods in wrong places
+- [ ] **Re-add ALV capture for RunReport**
+- [ ] **Test SAP GUI breakpoint sharing** - Set breakpoint via vsp, trigger in SAP GUI
 
-### Previous Session: Install Tools Upsert Logic
+### Previous Session: Method-Level Source Operations (2026-01-06)
 
-- Fixed package/object existence checks
-- Proper `[CREATE]` vs `[UPDATE]` reporting
+- Added `method` parameter to GetSource, EditSource, WriteSource
+- 95% token reduction for method-level work
+- Released as v2.21.0
