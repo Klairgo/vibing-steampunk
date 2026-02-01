@@ -85,6 +85,11 @@ type Config struct {
 
 	// Debugger configuration
 	TerminalID string // SAP GUI terminal ID for cross-tool breakpoint sharing
+
+	// Granular tool visibility (from .vsp.json)
+	// Key: tool name, Value: true=enabled, false=disabled
+	// Takes highest priority over mode and disabled groups
+	ToolsConfig map[string]bool
 }
 
 // NewServer creates a new MCP server for ABAP ADT tools.
@@ -171,8 +176,8 @@ func NewServer(cfg *Config) *Server {
 		asyncTasks:    make(map[string]*AsyncTask),
 	}
 
-	// Register tools based on mode and disabled groups
-	s.registerTools(cfg.Mode, cfg.DisabledGroups)
+	// Register tools based on mode, disabled groups, and granular tool config
+	s.registerTools(cfg.Mode, cfg.DisabledGroups, cfg.ToolsConfig)
 
 	return s
 }
@@ -194,7 +199,7 @@ func (s *Server) ServeStdio() error {
 	return server.ServeStdio(s.mcpServer)
 }
 
-// registerTools registers ADT tools with the MCP server based on mode and disabled groups.
+// registerTools registers ADT tools with the MCP server based on mode, disabled groups, and granular config.
 // Mode "focused" registers essential tools.
 // Mode "expert" registers all tools.
 // DisabledGroups can disable specific tool groups using short codes:
@@ -207,7 +212,12 @@ func (s *Server) ServeStdio() error {
 //   - "R" = Report tools (4 tools)
 //   - "I" = Install tools (4 tools)
 //   - "X" = EXPERIMENTAL: All debugger + RunReport (17 tools) - use to disable unreliable features
-func (s *Server) registerTools(mode string, disabledGroups string) {
+//
+// toolsConfig from .vsp.json has highest priority:
+//   - If tool is explicitly disabled (false), it will NOT be registered
+//   - If tool is explicitly enabled (true), it WILL be registered (overrides focused mode)
+//   - If tool is not in config, mode/disabledGroups rules apply
+func (s *Server) registerTools(mode string, disabledGroups string, toolsConfig map[string]bool) {
 	// Define tool groups for selective disablement
 	// Short codes: 5/U=UI5, T=Tests, H=HANA, D=Debug, C=CTS, X=Experimental
 	toolGroups := map[string][]string{
@@ -402,10 +412,17 @@ func (s *Server) registerTools(mode string, disabledGroups string) {
 
 	// Helper to check if tool should be registered
 	shouldRegister := func(toolName string) bool {
-		// Check if tool is disabled by group
+		// Priority 1: Check granular tool config from .vsp.json (highest priority)
+		if toolsConfig != nil {
+			if enabled, exists := toolsConfig[toolName]; exists {
+				return enabled // Explicit config overrides everything
+			}
+		}
+		// Priority 2: Check if tool is disabled by group
 		if disabledTools[toolName] {
 			return false
 		}
+		// Priority 3: Check mode
 		if mode == "expert" {
 			return true // Expert mode: register all tools (except disabled)
 		}

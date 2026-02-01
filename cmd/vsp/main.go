@@ -9,6 +9,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/oisee/vibing-steampunk/internal/mcp"
 	"github.com/oisee/vibing-steampunk/pkg/adt"
+	"github.com/oisee/vibing-steampunk/pkg/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -191,6 +192,25 @@ func runServer(cmd *cobra.Command, args []string) error {
 		}
 		if !cfg.ReadOnly && !cfg.BlockFreeSQL && cfg.AllowedOps == "" && cfg.DisallowedOps == "" && len(cfg.AllowedPackages) == 0 {
 			fmt.Fprintf(os.Stderr, "[VERBOSE] Safety: UNRESTRICTED (no safety checks active)\n")
+		}
+	}
+
+	// Load granular tool visibility from .vsp.json if present
+	if systemsCfg, configPath, err := config.LoadSystems(); err == nil && systemsCfg != nil {
+		if systemsCfg.Tools != nil {
+			cfg.ToolsConfig = systemsCfg.Tools
+			if cfg.Verbose {
+				enabled := 0
+				disabled := 0
+				for _, v := range systemsCfg.Tools {
+					if v {
+						enabled++
+					} else {
+						disabled++
+					}
+				}
+				fmt.Fprintf(os.Stderr, "[VERBOSE] Tool config loaded from %s: %d enabled, %d disabled\n", configPath, enabled, disabled)
+			}
 		}
 	}
 
