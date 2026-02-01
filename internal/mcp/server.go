@@ -2413,6 +2413,10 @@ func (s *Server) registerToolAliases(shouldRegister func(string) bool) {
 		"atc": {"RunATCCheck", "Alias for RunATCCheck - run ATC code check", s.handleRunATCCheck},
 	}
 
+	// Aliases disabled by default - they bloat the tool list without adding value
+	// Uncomment if you want short names like gs, ws, es, etc.
+	_ = aliases // suppress unused variable warning
+	/*
 	for alias, info := range aliases {
 		if shouldRegister(info.canonical) {
 			s.mcpServer.AddTool(mcp.NewTool(alias,
@@ -2422,6 +2426,7 @@ func (s *Server) registerToolAliases(shouldRegister func(string) bool) {
 			), info.handler)
 		}
 	}
+	*/
 }
 
 // newToolResultError creates an error result for tool execution failures.
