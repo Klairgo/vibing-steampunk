@@ -308,8 +308,9 @@ func resolveConfig(cmd *cobra.Command) {
 		cfg.DisallowedOps = viper.GetString("DISALLOWED_OPS")
 	}
 	if !cmd.Flags().Changed("allowed-packages") {
-		if pkgs := viper.GetStringSlice("ALLOWED_PACKAGES"); len(pkgs) > 0 {
-			cfg.AllowedPackages = pkgs
+		// Use GetString and split manually - GetStringSlice doesn't split comma-separated env vars
+		if pkgStr := viper.GetString("ALLOWED_PACKAGES"); pkgStr != "" {
+			cfg.AllowedPackages = splitCommaSeparated(pkgStr)
 		}
 	}
 	if !cmd.Flags().Changed("enable-transports") {
@@ -319,8 +320,9 @@ func resolveConfig(cmd *cobra.Command) {
 		cfg.TransportReadOnly = viper.GetBool("TRANSPORT_READ_ONLY")
 	}
 	if !cmd.Flags().Changed("allowed-transports") {
-		if transports := viper.GetStringSlice("ALLOWED_TRANSPORTS"); len(transports) > 0 {
-			cfg.AllowedTransports = transports
+		// Use GetString and split manually - GetStringSlice doesn't split comma-separated env vars
+		if transportStr := viper.GetString("ALLOWED_TRANSPORTS"); transportStr != "" {
+			cfg.AllowedTransports = splitCommaSeparated(transportStr)
 		}
 	}
 	if !cmd.Flags().Changed("allow-transportable-edits") {
@@ -449,6 +451,23 @@ func processCookieAuth(cmd *cobra.Command) error {
 	}
 
 	return nil
+}
+
+// splitCommaSeparated splits a comma-separated string into a slice, trimming whitespace.
+// This is needed because viper.GetStringSlice doesn't properly split comma-separated env vars.
+func splitCommaSeparated(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
 }
 
 func main() {

@@ -172,6 +172,8 @@ type CreateObjectOptions struct {
 	Responsible string              `json:"responsible,omitempty"`
 	// For function modules - the function group name
 	ParentName string `json:"parentName,omitempty"`
+	// For packages - the software component (required for transportable packages)
+	SoftwareComponent string `json:"softwareComponent,omitempty"`
 
 	// RAP-specific options
 	// For BDEF: the root CDS entity name (e.g., "ZTRAVEL" for define behavior for ZTRAVEL)
@@ -404,15 +406,15 @@ func buildCreateObjectBody(opts CreateObjectOptions, typeInfo objectTypeInfo, de
 	}
 
 	// For packages, use special structure with attributes element
-	// Local packages use "LOCAL" software component, transportable packages inherit from parent
+	// Local packages use "LOCAL" software component, transportable packages need explicit component
 	if opts.ObjectType == ObjectTypePackage {
 		// Determine software component based on package type
 		softwareComponent := "LOCAL"
 		transportLayer := ""
 		if !strings.HasPrefix(opts.Name, "$") {
-			// Transportable package - leave software component empty to inherit from parent
-			// SAP will determine the correct values based on the super package
-			softwareComponent = ""
+			// Transportable package - use provided software component or empty
+			// SAP requires explicit software component for transportable packages
+			softwareComponent = opts.SoftwareComponent
 		}
 		return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <%s %s xmlns:adtcore="http://www.sap.com/adt/core"

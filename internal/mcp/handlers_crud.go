@@ -183,17 +183,23 @@ func (s *Server) handleCreatePackage(ctx context.Context, request mcp.CallToolRe
 		transport = t
 	}
 
+	softwareComponent := ""
+	if sc, ok := request.Params.Arguments["software_component"].(string); ok && sc != "" {
+		softwareComponent = strings.ToUpper(sc)
+	}
+
 	// Transportable packages require transport parameter
 	if !strings.HasPrefix(name, "$") && transport == "" {
 		return newToolResultError("transport is required for creating transportable packages (non-$ packages). Use --enable-transports flag."), nil
 	}
 
 	opts := adt.CreateObjectOptions{
-		ObjectType:  adt.ObjectTypePackage,
-		Name:        name,
-		Description: description,
-		PackageName: parent, // Parent package
-		Transport:   transport,
+		ObjectType:        adt.ObjectTypePackage,
+		Name:              name,
+		Description:       description,
+		PackageName:       parent, // Parent package
+		Transport:         transport,
+		SoftwareComponent: softwareComponent,
 	}
 
 	err := s.adtClient.CreateObject(ctx, opts)

@@ -1261,6 +1261,9 @@ func (s *Server) registerTools(mode string, disabledGroups string, toolsConfig m
 		mcp.WithString("transport",
 			mcp.Description("Transport request number (required for transportable packages, e.g., 'A4HK900114')"),
 		),
+		mcp.WithString("software_component",
+			mcp.Description("Software component name (required for transportable packages, e.g., 'HOME', 'ZLOCAL'). Use GetInstalledComponents to list available components."),
+		),
 	), s.handleCreatePackage)
 	}
 
