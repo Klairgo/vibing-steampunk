@@ -11,6 +11,12 @@
 
 ## What's New
 
+**v2.25.0** - CreatePackage Software Component Support
+- **`software_component` Parameter**: Create transportable packages with proper software component (e.g., `HOME`, `ZLOCAL`)
+- **Viper Env Fix**: Comma-separated env vars (`SAP_ALLOWED_PACKAGES`, `SAP_ALLOWED_TRANSPORTS`) now parse correctly
+- **Closes #18**: Namespace URL encoding verified working
+- ⚠️ **Requires**: `--allow-transportable-edits` or `--enable-transports` flag for transportable packages
+
 **v2.24.0** - Transportable Edits Safety Feature
 - **Safety by Default**: Editing objects in transportable packages blocked unless explicitly enabled
 - **`--allow-transportable-edits`**: Opt-in flag to enable editing non-local objects
@@ -349,6 +355,49 @@ Add `.mcp.json` to your project:
   }
 }
 ```
+
+### Transportable Packages Configuration
+
+To work with transportable packages (non-`$` prefixed), you **must** explicitly enable transport support:
+
+```json
+{
+  "mcpServers": {
+    "abap-adt": {
+      "command": "/path/to/vsp",
+      "env": {
+        "SAP_URL": "https://your-sap-host:44300",
+        "SAP_USER": "your-username",
+        "SAP_PASSWORD": "your-password",
+        "SAP_CLIENT": "001",
+        "SAP_ALLOW_TRANSPORTABLE_EDITS": "true",
+        "SAP_ALLOWED_TRANSPORTS": "DEVK*,A4HK*",
+        "SAP_ALLOWED_PACKAGES": "ZPROD,$TMP,$*,Z*"
+      }
+    }
+  }
+}
+```
+
+| Env Variable | Purpose |
+|-------------|---------|
+| `SAP_ALLOW_TRANSPORTABLE_EDITS` | Enable editing objects in transportable packages |
+| `SAP_ENABLE_TRANSPORTS` | Enable full transport management (create, release) |
+| `SAP_ALLOWED_TRANSPORTS` | Whitelist transport patterns (wildcards supported) |
+| `SAP_ALLOWED_PACKAGES` | Whitelist package patterns (wildcards supported) |
+
+**CreatePackage with software component:**
+```
+CreatePackage(
+  name="ZPROD_005",
+  description="Sub-package",
+  parent="ZPROD",
+  transport="DEVK900123",
+  software_component="HOME"
+)
+```
+
+Without these flags, operations on transportable packages will be blocked by the safety system.
 
 ## Focused vs Expert Mode
 
