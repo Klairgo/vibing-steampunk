@@ -15,6 +15,16 @@ Read the milestone article: **[Agentic ABAP at 100 Stars: The Numbers, The Commu
 
 ## What's New
 
+**v2.26.0** - Multi-System MCP Support (SwitchSystem)
+- **`ListSystems` Tool**: List all configured SAP systems from `.vsp.json` with active system indicator
+- **`SwitchSystem` Tool**: Switch the active SAP system at runtime — all subsequent tool calls use the new system
+- **Cross-System Workflows**: Compare objects, search, or debug across differend systems without restarting the MCP server
+- **Lazy Client Creation**: ADT clients are created on-demand when you first switch to a system
+- **Safety Inheritance**: Safety settings (read-only, allowed packages, etc.) carry over to switched systems
+- **GetConnectionInfo Enhanced**: Now shows active system name and available systems
+- **Zero Config Migration**: Uses the existing `.vsp.json` system profiles — just add your systems and passwords
+- ⚠️ **Requires**: `.vsp.json` with `systems` configuration (see [Multi-System MCP Setup](#multi-system-mcp-switchsystem))
+
 **v2.25.0** - CreatePackage Software Component Support
 - **`software_component` Parameter**: Create transportable packages with proper software component (e.g., `HOME`, `ZLOCAL`)
 - **Viper Env Fix**: Comma-separated env vars (`SAP_ALLOWED_PACKAGES`, `SAP_ALLOWED_TRANSPORTS`) now parse correctly
@@ -277,6 +287,72 @@ Configure multiple SAP systems in `.vsp.json`:
 2. `.vsp/systems.json`
 3. `~/.vsp.json`
 4. `~/.vsp/systems.json`
+
+### Multi-System MCP (SwitchSystem)
+
+When running as an MCP server (e.g., in Cursor or Claude Desktop), vsp can now switch between multiple SAP systems **at runtime** without restarting. This enables cross-system workflows like comparing objects between DEV and QA, checking transport contents across landscapes, etc.
+
+**Setup:** Create a `.vsp.json` alongside your MCP configuration:
+
+```json
+{
+  "default": "edz",
+  "systems": {
+    "edz": {
+      "url": "https://edz.example.com:44340",
+      "user": "DEVELOPER",
+      "client": "220"
+    },
+    "edy": {
+      "url": "https://edy.example.com:44340",
+      "user": "DEVELOPER",
+      "client": "220"
+    },
+    "prod": {
+      "url": "https://prod.example.com:44300",
+      "user": "READONLY",
+      "client": "100",
+      "read_only": true
+    }
+  }
+}
+```
+
+**Passwords:** Set via environment variables (recommended) or inline in config:
+```bash
+export VSP_EDZ_PASSWORD=secret1
+export VSP_EDY_PASSWORD=secret2
+export VSP_PROD_PASSWORD=secret3
+```
+
+**MCP Tools:**
+
+| Tool | Description |
+|------|-------------|
+| `ListSystems` | Show all configured systems and which is active |
+| `SwitchSystem` | Switch to a different SAP system by name |
+
+**Example conversation:**
+```
+User: "Search for ZCL_ORDER* on EDZ"
+AI:   → SearchObject("ZCL_ORDER*")   (already on EDZ)
+
+User: "Now check if the same class exists on EDY"
+AI:   → SwitchSystem("edy")
+      → SearchObject("ZCL_ORDER*")
+
+User: "Compare the source between the two systems"
+AI:   → GetSource(CLAS, "ZCL_ORDER") on EDY
+      → SwitchSystem("edz")
+      → GetSource(CLAS, "ZCL_ORDER") on EDZ
+      → Show diff
+```
+
+**Notes:**
+- The MCP server starts connected to the system specified by `SAP_URL`/`SAP_USER` env vars (or the `default` system in `.vsp.json`)
+- Safety settings (read-only, allowed packages, etc.) carry over when switching systems
+- WebSocket connections (ZADT_VSP) are reset on system switch
+- ADT clients are created lazily — switching to a system for the first time creates a new HTTP session
 
 <details>
 <summary><strong>MCP Server Configuration</strong></summary>
@@ -637,7 +713,7 @@ See [AI-Powered RCA Workflows](reports/2025-12-05-013-ai-powered-rca-workflows.m
 - **Write:** WriteSource, EditSource, ImportFromFile, ExportToFile, MoveObject
 - **Dev:** SyntaxCheck, RunUnitTests, RunATCCheck, LockObject, UnlockObject
 - **Intelligence:** FindDefinition, FindReferences
-- **System:** GetSystemInfo, GetInstalledComponents, GetCallGraph, GetObjectStructure, GetFeatures
+- **System:** GetSystemInfo, GetInstalledComponents, GetCallGraph, GetObjectStructure, GetFeatures, ListSystems, SwitchSystem
 - **Diagnostics:** GetDumps, GetDump, ListTraces, GetTrace, GetSQLTraceState, ListSQLTraces
 - **Git:** GitTypes, GitExport (requires abapGit on SAP)
 - **Reports:** RunReport, GetVariants, GetTextElements, SetTextElements

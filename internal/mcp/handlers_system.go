@@ -49,6 +49,18 @@ func (s *Server) handleGetConnectionInfo(ctx context.Context, request mcp.CallTo
 	// Add debugger status
 	info["debugger_user"] = strings.ToUpper(s.config.Username) // Debugger uses uppercase
 
+	// Add multi-system info if configured
+	s.systemsMu.RLock()
+	if len(s.systems) > 0 {
+		info["active_system"] = s.activeSystem
+		systemNames := make([]string, 0, len(s.systems))
+		for name := range s.systems {
+			systemNames = append(systemNames, name)
+		}
+		info["available_systems"] = systemNames
+	}
+	s.systemsMu.RUnlock()
+
 	result, _ := json.MarshalIndent(info, "", "  ")
 	return mcp.NewToolResultText(string(result)), nil
 }

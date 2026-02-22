@@ -3240,6 +3240,39 @@ func (c *Client) CompareSource(ctx context.Context, type1, name1, type2, name2 s
 	return result, nil
 }
 
+// CrossSystemCompareSource compares pre-fetched source code from two (potentially different) systems.
+// label1/label2 identify the sources (e.g., "[edz] CLAS:ZCL_TEST" vs "[edy] CLAS:ZCL_TEST").
+func CrossSystemCompareSource(label1, label2, source1, source2 string) *SourceDiff {
+	result := &SourceDiff{
+		Object1:   label1,
+		Object2:   label2,
+		Identical: source1 == source2,
+	}
+
+	if result.Identical {
+		result.Diff = "Sources are identical"
+		return result
+	}
+
+	// Generate unified diff
+	lines1 := strings.Split(source1, "\n")
+	lines2 := strings.Split(source2, "\n")
+
+	diff := generateUnifiedDiff(label1, label2, lines1, lines2)
+	result.Diff = diff
+
+	// Count added/removed lines
+	for _, line := range strings.Split(diff, "\n") {
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+			result.AddedLines++
+		} else if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+			result.RemovedLines++
+		}
+	}
+
+	return result
+}
+
 // generateUnifiedDiff creates a unified diff between two sets of lines.
 func generateUnifiedDiff(name1, name2 string, lines1, lines2 []string) string {
 	var diff strings.Builder

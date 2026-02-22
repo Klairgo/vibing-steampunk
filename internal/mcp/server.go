@@ -34,10 +34,27 @@ type Server struct {
 	featureProber  *adt.FeatureProber         // Feature detection system (safety network)
 	featureConfig  adt.FeatureConfig          // Feature configuration
 
+	// Multi-system support
+	systemsMu    sync.RWMutex
+	systems      map[string]*systemEntry // loaded from .vsp.json or Config.Systems
+	activeSystem string                  // current system name (empty = single-system mode)
+
 	// Async task management
 	asyncTasks   map[string]*AsyncTask
 	asyncTasksMu sync.RWMutex
 	asyncTaskID  int64
+}
+
+// systemEntry holds a configured SAP system and its lazily-created ADT client.
+type systemEntry struct {
+	Name     string
+	URL      string
+	User     string
+	Password string
+	Client   string
+	Language string
+	Insecure bool
+	ADTClient *adt.Client // lazily created on first SwitchSystem call
 }
 
 // Config holds MCP server configuration.
@@ -91,6 +108,22 @@ type Config struct {
 	// Key: tool name, Value: true=enabled, false=disabled
 	// Takes highest priority over mode and disabled groups
 	ToolsConfig map[string]bool
+
+	// Multi-system support (from .vsp.json systems config)
+	// Key: system name, Value: system configuration
+	Systems map[string]SystemConfigEntry
+	// DefaultSystem is the system to use at startup (from .vsp.json "default" field)
+	DefaultSystem string
+}
+
+// SystemConfigEntry holds a SAP system configuration for multi-system support.
+type SystemConfigEntry struct {
+	URL      string
+	User     string
+	Password string
+	Client   string
+	Language string
+	Insecure bool
 }
 
 // NewServer creates a new MCP server for ABAP ADT tools.
@@ -178,6 +211,36 @@ func NewServer(cfg *Config) *Server {
 		featureProber: featureProber,
 		featureConfig: featureConfig,
 		asyncTasks:    make(map[string]*AsyncTask),
+	}
+
+	// Initialize multi-system support if systems are configured
+	if len(cfg.Systems) > 0 {
+		s.systems = make(map[string]*systemEntry, len(cfg.Systems))
+		for name, sys := range cfg.Systems {
+			s.systems[name] = &systemEntry{
+				Name:     name,
+				URL:      sys.URL,
+				User:     sys.User,
+				Password: sys.Password,
+				Client:   sys.Client,
+				Language: sys.Language,
+				Insecure: sys.Insecure,
+			}
+		}
+		// Mark the initial system as active if it matches one of the configured systems
+		if cfg.DefaultSystem != "" {
+			s.activeSystem = cfg.DefaultSystem
+		}
+		// Tag the current client to the matching system entry
+		for name, entry := range s.systems {
+			if entry.URL == cfg.BaseURL && entry.User == cfg.Username {
+				entry.ADTClient = adtClient
+				if s.activeSystem == "" {
+					s.activeSystem = name
+				}
+				break
+			}
+		}
 	}
 
 	// Register tools based on mode, disabled groups, and granular tool config
@@ -670,6 +733,22 @@ func (s *Server) registerTools(mode string, disabledGroups string, toolsConfig m
 	s.mcpServer.AddTool(mcp.NewTool("GetFeatures",
 		mcp.WithDescription("Probe SAP system for available features. Returns status of optional capabilities like abapGit, RAP/OData, AMDP debugging, UI5/BSP, and CTS transports. Use this to understand what features are available before attempting to use them."),
 	), s.handleGetFeatures)
+
+	// --- Multi-System Tools ---
+	// Only registered when systems are configured (from .vsp.json)
+	if len(s.systems) > 0 {
+		s.mcpServer.AddTool(mcp.NewTool("ListSystems",
+			mcp.WithDescription("List configured SAP systems from .vsp.json. Shows all available systems and which one is currently active. Use SwitchSystem to change the active system."),
+		), s.handleListSystems)
+
+		s.mcpServer.AddTool(mcp.NewTool("SwitchSystem",
+			mcp.WithDescription("Switch the active SAP system. All subsequent tool calls will use the new system's connection. Requires systems configured in .vsp.json. Use ListSystems to see available systems."),
+			mcp.WithString("system",
+				mcp.Required(),
+				mcp.Description("System name from .vsp.json config (e.g., 'edz', 'edy', 'dev', 'prod')"),
+			),
+		), s.handleSwitchSystem)
+	}
 
 	// GetAbapHelp - ABAP Keyword Documentation
 	// Always registered - provides URL and search query, optionally real docs via ZADT_VSP
@@ -1295,10 +1374,10 @@ func (s *Server) registerTools(mode string, disabledGroups string, toolsConfig m
 		), s.handleCreateTable)
 	}
 
-	// CompareSource - Diff two objects
+	// CompareSource - Diff two objects (supports cross-system comparison)
 	if shouldRegister("CompareSource") {
-		s.mcpServer.AddTool(mcp.NewTool("CompareSource",
-			mcp.WithDescription("Compare source code of two objects and return unified diff. Supports all object types from GetSource."),
+		compareSourceOpts := []mcp.ToolOption{
+			mcp.WithDescription("Compare source code of two objects and return unified diff. Supports all object types from GetSource. When multi-system is configured, use system1/system2 to compare objects across different SAP systems (e.g., compare EDZ vs EDY)."),
 			mcp.WithString("type1",
 				mcp.Required(),
 				mcp.Description("Object type of first object: PROG, CLAS, INTF, FUNC, FUGR, INCL, DDLS, BDEF, SRVD"),
@@ -1327,7 +1406,19 @@ func (s *Server) registerTools(mode string, disabledGroups string, toolsConfig m
 			mcp.WithString("parent2",
 				mcp.Description("Function group for second object if FUNC"),
 			),
-		), s.handleCompareSource)
+		}
+		// Add cross-system parameters when multi-system is configured
+		if len(s.systems) > 0 {
+			compareSourceOpts = append(compareSourceOpts,
+				mcp.WithString("system1",
+					mcp.Description("SAP system for first object (e.g., 'edz'). Defaults to active system. Use ListSystems to see available systems."),
+				),
+				mcp.WithString("system2",
+					mcp.Description("SAP system for second object (e.g., 'edy'). Defaults to active system. Enables cross-system comparison when different from system1."),
+				),
+			)
+		}
+		s.mcpServer.AddTool(mcp.NewTool("CompareSource", compareSourceOpts...), s.handleCompareSource)
 	}
 
 	// CloneObject - Copy object to new name

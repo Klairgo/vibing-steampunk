@@ -200,7 +200,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Load granular tool visibility from .vsp.json if present
+	// Load granular tool visibility and multi-system config from .vsp.json if present
 	if systemsCfg, configPath, err := config.LoadSystems(); err == nil && systemsCfg != nil {
 		if systemsCfg.Tools != nil {
 			cfg.ToolsConfig = systemsCfg.Tools
@@ -215,6 +215,44 @@ func runServer(cmd *cobra.Command, args []string) error {
 					}
 				}
 				fmt.Fprintf(os.Stderr, "[VERBOSE] Tool config loaded from %s: %d enabled, %d disabled\n", configPath, enabled, disabled)
+			}
+		}
+
+		// Load multi-system configuration for SwitchSystem/ListSystems tools
+		if len(systemsCfg.Systems) > 0 {
+			cfg.Systems = make(map[string]mcp.SystemConfigEntry, len(systemsCfg.Systems))
+			for name, sys := range systemsCfg.Systems {
+				// Resolve password from env var if not in config
+				password := sys.Password
+				if password == "" {
+					envKey := fmt.Sprintf("VSP_%s_PASSWORD", strings.ToUpper(name))
+					password = os.Getenv(envKey)
+				}
+
+				cfg.Systems[name] = mcp.SystemConfigEntry{
+					URL:      sys.URL,
+					User:     sys.User,
+					Password: password,
+					Client:   sys.Client,
+					Language: sys.Language,
+					Insecure: sys.Insecure,
+				}
+			}
+			cfg.DefaultSystem = systemsCfg.Default
+
+			if cfg.Verbose {
+				fmt.Fprintf(os.Stderr, "[VERBOSE] Multi-system config loaded from %s: %d systems", configPath, len(cfg.Systems))
+				if cfg.DefaultSystem != "" {
+					fmt.Fprintf(os.Stderr, " (default: %s)", cfg.DefaultSystem)
+				}
+				fmt.Fprintln(os.Stderr)
+				for name, sys := range cfg.Systems {
+					hasAuth := "✗"
+					if sys.Password != "" {
+						hasAuth = "✓"
+					}
+					fmt.Fprintf(os.Stderr, "[VERBOSE]   %s: %s [%s@%s] auth:%s\n", name, sys.URL, sys.User, sys.Client, hasAuth)
+				}
 			}
 		}
 	}

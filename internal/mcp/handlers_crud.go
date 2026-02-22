@@ -314,6 +314,41 @@ func (s *Server) handleCompareSource(ctx context.Context, request mcp.CallToolRe
 		opts2.Parent = parent
 	}
 
+	// Check for cross-system comparison parameters
+	system1, _ := request.Params.Arguments["system1"].(string)
+	system2, _ := request.Params.Arguments["system2"].(string)
+
+	// If either system is specified, perform cross-system comparison
+	if system1 != "" || system2 != "" {
+		client1, sysName1, err := s.getClientForSystem(system1)
+		if err != nil {
+			return newToolResultError(fmt.Sprintf("Failed to get client for system1 '%s': %v", system1, err)), nil
+		}
+		client2, sysName2, err := s.getClientForSystem(system2)
+		if err != nil {
+			return newToolResultError(fmt.Sprintf("Failed to get client for system2 '%s': %v", system2, err)), nil
+		}
+
+		// Fetch source from each system
+		source1, err := client1.GetSource(ctx, type1, name1, opts1)
+		if err != nil {
+			return newToolResultError(fmt.Sprintf("Failed to get source from system '%s' for %s %s: %v", sysName1, type1, name1, err)), nil
+		}
+		source2, err := client2.GetSource(ctx, type2, name2, opts2)
+		if err != nil {
+			return newToolResultError(fmt.Sprintf("Failed to get source from system '%s' for %s %s: %v", sysName2, type2, name2, err)), nil
+		}
+
+		// Build labels that include the system name
+		label1 := fmt.Sprintf("[%s] %s:%s", sysName1, type1, name1)
+		label2 := fmt.Sprintf("[%s] %s:%s", sysName2, type2, name2)
+
+		diff := adt.CrossSystemCompareSource(label1, label2, source1, source2)
+		output, _ := json.MarshalIndent(diff, "", "  ")
+		return mcp.NewToolResultText(string(output)), nil
+	}
+
+	// Standard same-system comparison
 	diff, err := s.adtClient.CompareSource(ctx, type1, name1, type2, name2, opts1, opts2)
 	if err != nil {
 		return newToolResultError(fmt.Sprintf("CompareSource failed: %v", err)), nil

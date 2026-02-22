@@ -34,6 +34,20 @@ type DependencyInfo struct {
 	Objects     []string // Object names (populated on load)
 }
 
+// GetDependencyZIP returns the embedded ZIP data for a named dependency, or nil if not available.
+func GetDependencyZIP(name string) []byte {
+	// TODO: Return actual embedded ZIP data when available.
+	// For now, no ZIPs are embedded so always return nil.
+	switch strings.ToLower(name) {
+	// case "abapgit-standalone":
+	// 	return AbapGitStandalone
+	// case "abapgit-dev":
+	// 	return AbapGitDev
+	default:
+		return nil
+	}
+}
+
 // GetAvailableDependencies returns list of embedded dependencies.
 func GetAvailableDependencies() []DependencyInfo {
 	return []DependencyInfo{
